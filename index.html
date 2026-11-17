@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#161512">
+<title>Opening Coach</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="app">
+ <aside class="side">
+  <div class="logo"><img src="icon.svg" alt=""><span>Opening Coach</span></div>
+  <nav class="nav" id="nav">
+   <button data-v="home" class="on"><svg viewBox="0 0 24 24"><path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Dashboard</span></button>
+   <button data-v="explore"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg><span>Openings</span></button>
+   <button data-v="mistakes"><svg viewBox="0 0 24 24"><path d="M12 3 2 20h20zM12 9v5M12 17.5v.5"/></svg><span>Mistakes</span></button>
+   <button data-v="practice"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 4a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 4a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg><span>Practice</span></button>
+   <button data-v="settings"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 12h2M18 12h2M12 4v2M12 18v2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4"/></svg><span>Settings</span></button>
+  </nav>
+  <div class="me" id="me">
+   <div class="who"><div class="av" id="av"></div><div><b id="uname">–</b><small id="ustat">not loaded</small></div></div>
+   <button class="sync" id="syncBtn"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3M18 3v4h-4M6 21v-4h4"/></svg><span>Sync games</span></button>
+   <div class="eng" id="engStat"></div>
+  </div>
+ </aside>
+
+ <div class="main">
+  <div class="topbar">
+   <h1 id="title">Dashboard</h1>
+   <div class="filters">
+    <div class="seg" id="fTc"><button data-v="all" class="on">All</button><button data-v="r">Rapid</button><button data-v="fast">Blitz</button></div>
+    <div class="seg" id="fPer"><button data-v="90">3 mo</button><button data-v="365">1 yr</button><button data-v="all" class="on">All</button></div>
+   </div>
+  </div>
+
+  <div class="loading" id="loading" hidden><div class="spin"></div><b id="loadT">Loading your games…</b><small id="loadS"></small><div class="pbar"><i id="loadP"></i></div></div>
+
+  <section class="view" id="v-home">
+   <div class="hero">
+    <div class="card rating">
+     <div class="cardh"><h2>Rating</h2><div class="seg sm" id="rTc"><button data-v="r" class="on">Rapid</button><button data-v="b">Blitz</button></div></div>
+     <div class="rnow"><b id="rNow">–</b><span id="rDelta"></span></div>
+     <div class="chart" id="rChart"><svg></svg><div class="tip" id="rTip" hidden></div></div>
+    </div>
+    <div class="kpis" id="kpis"></div>
+   </div>
+   <div class="grid2">
+    <div class="card">
+     <div class="cardh"><h2>Biggest leaks</h2><small>lines you play often but score badly in</small></div>
+     <div id="leaks" class="leaks"></div>
+    </div>
+    <div class="card">
+     <div class="cardh"><h2>Most played</h2><div class="seg sm" id="mpCol"><button data-v="w" class="on">White</button><button data-v="b">Black</button></div></div>
+     <div id="mp"></div>
+    </div>
+   </div>
+   <div class="card">
+    <div class="cardh"><h2>Repeated mistakes</h2><small>engine-checked moves you keep playing</small><button class="lnk" data-go="mistakes">See all</button></div>
+    <div id="homeMist" class="mistrow"></div>
+   </div>
+  </section>
+
+  <section class="view" id="v-explore" hidden>
+   <div class="playarea">
+    <div class="boardwrap">
+     <div class="evalbar" id="eEval"><i></i><span></span></div>
+     <div class="board" id="eBoard"></div>
+    </div>
+    <div class="panel">
+     <div class="ptop">
+      <div class="seg" id="eCol"><button data-v="w" class="on">As White</button><button data-v="b">As Black</button></div>
+      <div class="btns"><button class="ib" id="eStart" title="Start">⏮</button><button class="ib" id="eBack" title="Back">◀</button></div>
+     </div>
+     <div class="moves" id="ePath"></div>
+     <div class="posinfo" id="eInfo"></div>
+     <div class="engline" id="eEng"></div>
+     <div class="mtable" id="eRows"></div>
+     <div id="eNote"></div>
+    </div>
+   </div>
+  </section>
+
+  <section class="view" id="v-mistakes" hidden>
+   <p class="intro" id="mIntro"></p>
+   <div class="mlist" id="mList"></div>
+  </section>
+
+  <section class="view" id="v-practice" hidden>
+   <div class="mods" id="mods"></div>
+   <div class="playarea">
+    <div class="boardwrap"><div class="board" id="pBoard"></div></div>
+    <div class="panel">
+     <div class="coach">
+      <div class="cstat" id="pStatus"></div>
+      <div class="cfb" id="pFb"></div>
+     </div>
+     <div class="moves" id="pPath"></div>
+     <div class="btns wide"><button class="btn" id="pHint">Hint</button><button class="btn" id="pShow">Show move</button><button class="btn pri" id="pNext">Next line</button></div>
+     <div class="prog" id="pProg"></div>
+     <div id="pNote"></div>
+    </div>
+   </div>
+  </section>
+
+  <section class="view" id="v-settings" hidden>
+   <div class="card narrow">
+    <h2>chess.com account</h2>
+    <form id="uForm" class="uform"><input id="uIn" autocomplete="off" spellcheck="false" placeholder="chess.com username"><button class="btn pri">Load games</button></form>
+    <p class="small">Games are downloaded from the public chess.com API and stored in this browser. Finished months are never downloaded again; only new games are fetched and analysed when you sync.</p>
+    <h2 style="margin-top:28px">Engine analysis</h2>
+    <p class="small">Stockfish 11 runs in your browser and checks the moves you play most often in the opening (depth <span id="depthV">14</span>). Results are cached, so each position is analysed only once.</p>
+    <div class="btns"><button class="btn" id="engRun">Analyse now</button><button class="btn" id="engClear">Clear engine cache</button><button class="btn" id="allClear">Delete all stored data</button></div>
+    <p class="small" id="setMsg"></p>
+    <h2 style="margin-top:28px">About</h2>
+    <p class="small">Pieces: cburnett set by Colin M.L. Burnett (GPLv2+). Engine: <a href="https://github.com/nmrugg/stockfish.js">Stockfish.js</a> (GPL). Opening notes are hand-written for this repertoire.</p>
+   </div>
+  </section>
+ </div>
+</div>
+<nav class="bnav" id="bnav"></nav>
+<script src="chess.js"></script>
+<script src="pieces.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
