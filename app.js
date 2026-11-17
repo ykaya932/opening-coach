@@ -316,21 +316,75 @@ function hint(show){const e=PR.exp;if(!e)return;const m=C.fromSan(pB.st,e.x);if(
  if(PR.tries===0){PR.lineErr++;prog.mist[key]=(prog.mist[key]||0)+1;saveProg()}PR.tries=Math.max(PR.tries,1);
  if(show){userMove(m);return}pB.arrow([{from:m.from,to:m.to,col:'#e7b84c'}]);fb(e.why==='engine'?`Engine suggestion. Your usual ${e.yours} costs ${(e.loss/100).toFixed(1)} pawns here.`:e.a.length>1?`Also fine: ${e.a.filter(x=>x!==e.x).join(', ')}`:'Follow the arrow.')}
 
+/* ================= courses (spaced repetition) ================= */
+const SRS=LS.get('srs',{});const saveSRS=()=>LS.set('srs',SRS);
+const IV=[4/24,1,3,7,16,35,90];
+function parseLine(s){const out=[];const re=/\{([^}]*)\}|(\S+)/g;let m;while((m=re.exec(s))){if(m[1]!=null){if(out.length)out[out.length-1].note=m[1].trim()}else out.push({san:m[2]})}return out}
+const CRS=(typeof COURSES!=='undefined'?COURSES:[]).map(c=>({...c,lines:c.lines.map(l=>{const mv=parseLine(l.moves);mv.forEach((x,i)=>{if(!x.note&&c.notes){const k=mv.slice(0,i+1).map(y=>y.san).join(' ');if(c.notes[k])x.note=c.notes[k]}});return{...l,mv,course:c.id}})}));
+const allLines=()=>CRS.flatMap(c=>c.lines);
+const lstate=l=>{const s=SRS[l.id];return!s?'new':s.due<=Date.now()?'due':'ok'};
+const SCOL={new:'#6f685e',due:'#e7b84c',ok:'#8fc15a'};
+const dueIn=d=>{const h=(d-Date.now())/36e5;return h<1?'soon':h<24?Math.round(h)+' h':Math.round(h/24)+' d'};
+const CV={view:'list',c:null,line:null,mode:'learn',st:null,i:0,err:0,tries:0,queue:[],busy:false,done:false};let cB;
+function coursesPage(){$('cList').hidden=CV.view==='train';$('cTrain').hidden=CV.view!=='train';if(CV.view==='list')courseList();else if(CV.view==='course')courseView();else trainRender()}
+function courseList(){$('cList').innerHTML=`<p class="intro">Learn complete opening lines with explanations, then review them on a spaced-repetition schedule: lines you know come back less often, lines you miss come back sooner.</p><div class="clist">`+CRS.map(c=>{const L=c.lines,n=L.filter(l=>lstate(l)!=='new').length,d=L.filter(l=>lstate(l)==='due').length;const st=C.play(c.pos.split(' '));
+ return`<div class="ccard"><div class="cv">${mini(st,c.c==='b')}<div><h3>${esc(c.name)}</h3><div class="side">${c.c==='w'?'You play White':'You play Black'} · ${L.length} lines</div></div></div><div class="cb"><p>${esc(c.blurb)}</p>
+ <div class="pbar2"><i style="width:${L.filter(l=>lstate(l)==='ok').length/L.length*100}%;background:var(--acc)"></i><i style="width:${d/L.length*100}%;background:var(--gold)"></i></div>
+ <div class="cprog"><span><b>${n}</b>/${L.length} learned</span>·<span><b>${d}</b> due for review</span></div>
+ <div class="btns wide"><button class="btn" data-open="${c.id}">Open</button>${d?`<button class="btn pri" data-rev="${c.id}">Review ${d}</button>`:n<L.length?`<button class="btn pri" data-learn="${c.id}">Learn next</button>`:`<button class="btn" data-rev="${c.id}">Review all</button>`}</div></div></div>`}).join('')+'</div>'}
+function gamesFollowing(l,c){const sans=l.mv.map(x=>x.san);let best=0,n=0;const gs=GS.filter(g=>g.c===c);for(let d=Math.min(16,sans.length);d>=4;d--){const k=gs.filter(g=>pre(g,sans.slice(0,d))).length;if(k){best=d;n=k;break}}return{d:best,n}}
+function courseView(){const c=CRS.find(x=>x.id===CV.c);const ch=[...new Set(c.lines.map(l=>l.ch))];
+ $('cList').innerHTML=`<div class="chead"><button class="ib" data-back="1">◀</button><h2>${esc(c.name)}</h2><div class="btns"><button class="btn" data-learn="${c.id}">Learn next</button><button class="btn pri" data-rev="${c.id}">Review due</button></div></div><div class="cintro">${esc(c.intro)}</div>`+
+ ch.map(h=>`<div class="chap"><h3>${esc(h)}</h3>`+c.lines.filter(l=>l.ch===h).map(l=>{const s=lstate(l),r=SRS[l.id],f=gamesFollowing(l,c.c);
+  return`<button class="lrow" data-line="${l.id}"><span class="st" style="background:${SCOL[s]}"></span><span><b>${esc(l.name)}</b><small>${esc(fmt(l.mv.map(x=>x.san)))}</small></span><span class="yg">${f.n>=2?`your games: ${f.n} reach move ${Math.ceil(f.d/2)}`:''}</span><span class="lv">${s==='new'?'new':s==='due'?'due now':'next in '+dueIn(r.due)}${r?`<br>level ${r.lv+1}`:''}</span></button>`}).join('')+'</div>').join('')}
+function startLine(l,mode){CV.view='train';CV.line=l;CV.c=l.course;CV.mode=mode;CV.i=0;CV.err=0;CV.tries=0;CV.done=false;const c=CRS.find(x=>x.id===l.course);
+ CV.st=C.start();cB.set(CV.st,{flip:c.c==='b',last:null});coursesPage();$('cNote').className='explain empty';$('cNote').innerHTML=esc(l.intro||'Play through the line. Your moves are shown with a gold arrow in Learn mode.');trainStep()}
+const cMine=()=>{const c=CRS.find(x=>x.id===CV.c);return(CV.st.t==='w')===(c.c==='w')};
+function trainRender(){const l=CV.line,c=CRS.find(x=>x.id===CV.c);$('cCh').textContent=c.name+' · '+l.ch;$('cName').textContent=l.name;
+ $('cMode').className='mode '+CV.mode;$('cMode').textContent=CV.mode==='learn'?'Learn':'Review'+(CV.queue.length?` · ${CV.queue.length} left`:'');
+ $('cPath').innerHTML=l.mv.slice(0,CV.i).map((x,i)=>(i%2===0?`<span class="no">${i/2+1}.</span>`:'')+`<button class="${i===CV.i-1?'cur':''}" tabindex="-1">${esc(x.san)}</button>`).join('')||'<span class="no">Starting position</span>';
+ const sans=l.mv.slice(0,CV.i).map(x=>x.san);const n=CV.i>=2?GS.filter(g=>g.c===c.c&&pre(g,sans)).length:0;$('cGames').textContent=CV.i>=2?(n?`You have reached this position in ${n} of your games.`:'You have not reached this position in your games yet.'):'';
+ $('cNext').textContent=CV.done?(CV.queue.length?'Next review':'Next line'):'Skip line';}
+function cNote(i){const x=CV.line.mv[i];if(!x)return;const el=$('cNote');if(x.note){el.className='explain';el.innerHTML=`<span class="mv">${esc(fmt([x.san],i))}</span>${esc(x.note)}`}}
+function cStatus(t,col){$('cStatus').innerHTML=`<span class="dot" style="background:${col}"></span>${esc(t)}`}
+function cFb(t,k){$('cFb').className='cfb '+(k||'');$('cFb').textContent=t}
+function trainStep(){const l=CV.line;trainRender();if(CV.i>=l.mv.length)return trainEnd();
+ const x=l.mv[CV.i],m=C.fromSan(CV.st,x.san);if(!m){cFb('This line has an error.','no');return}
+ if(!cMine()){CV.busy=true;cStatus('Opponent to move…','#7c766c');setTimeout(()=>{if(CV.line!==l||CV.view!=='train')return;CV.busy=false;CV.st=C.make(CV.st,m);cB.set(CV.st,{last:m,anim:m});cNote(CV.i);CV.i++;trainStep()},CV.i===0?300:600);return}
+ CV.tries=0;const c=CRS.find(z=>z.id===CV.c);cStatus(CV.mode==='learn'?'Your move: follow the arrow':'Your move',c.c==='w'?'#fff':'#111');
+ if(CV.mode==='learn'){cB.arrow([{from:m.from,to:m.to,col:'#e7b84c'}]);cFb(`Play ${fmt([x.san],CV.i)}`)}else cFb('')}
+function trainMove(m,dragged){const l=CV.line,x=l.mv[CV.i];if(!x||CV.done||CV.busy||!cMine())return;const s=C.san(CV.st,m);
+ if(C.clean(s)===C.clean(x.san)){CV.st=C.make(CV.st,m);cB.set(CV.st,{last:m,anim:m,dragged});cB.mark({[m.to]:'ok'});cNote(CV.i);cFb(CV.tries?'✓ Correct now':'✓ Correct','ok');CV.i++;setTimeout(trainStep,350)}
+ else{CV.tries++;if(CV.tries===1)CV.err++;cB.set(CV.st,{});cB.mark({[m.from]:'bad',[m.to]:'bad'});setTimeout(()=>cB.mark({}),700);
+  const want=C.fromSan(CV.st,x.san);if(CV.mode==='learn'||CV.tries>=2){cB.arrow([{from:want.from,to:want.to,col:'#e7b84c'}]);cFb(`Not ${s}. The move in this line is ${x.san}.`,'no')}else cFb(`${s} is not the move in this line. Try again (one more miss shows the answer).`,'no')}}
+function trainEnd(){const l=CV.line;CV.done=true;const r=SRS[l.id]||{lv:-1,fails:0,seen:0};r.seen++;
+ if(CV.mode==='learn'){r.lv=0}else if(CV.err===0){r.lv=Math.min(IV.length-1,r.lv+1)}else{r.lv=0;r.fails++}
+ r.due=Date.now()+IV[Math.max(0,r.lv)]*864e5;SRS[l.id]=r;saveSRS();
+ cStatus(CV.mode==='learn'?'Line learned':CV.err?`Review done · ${CV.err} mistake${CV.err>1?'s':''}`:'Perfect review','#8fc15a');
+ cFb(CV.mode==='learn'?`It will come back for review in ${dueIn(r.due)}.`:CV.err?`Back to level 1: you'll see it again in ${dueIn(r.due)}.`:`Level ${r.lv+1}: next review in ${dueIn(r.due)}.`,'ok');trainRender()}
+function cNext(){if(CV.done&&CV.queue.length){const l=CV.queue.shift();return startLine(l,'review')}const c=CRS.find(x=>x.id===CV.c);const nx=c.lines.find(l=>lstate(l)==='new');if(nx)startLine(nx,'learn');else{CV.view='course';coursesPage()}}
+function cAction(e){const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+ if(d.open){CV.c=d.open;CV.view='course';coursesPage()}
+ else if(d.back){CV.view='list';coursesPage()}
+ else if(d.learn){const c=CRS.find(x=>x.id===d.learn);const l=c.lines.find(l=>lstate(l)==='new')||c.lines[0];CV.queue=[];startLine(l,lstate(l)==='new'?'learn':'review')}
+ else if(d.rev){const c=CRS.find(x=>x.id===d.rev);let q=c.lines.filter(l=>lstate(l)==='due');if(!q.length)q=c.lines.filter(l=>lstate(l)!=='new');if(!q.length)q=c.lines.slice();q=q.sort(()=>Math.random()-.5);const l=q.shift();CV.queue=q;startLine(l,SRS[l.id]?'review':'learn')}
+ else if(d.line){const l=allLines().find(x=>x.id===d.line);CV.queue=[];startLine(l,lstate(l)==='new'?'learn':'review')}}
+
 /* ================= shell ================= */
 let CUR='home';
-const TITLES={home:'Dashboard',explore:'Openings',mistakes:'Mistakes',practice:'Practice',settings:'Settings'};
+const TITLES={home:'Dashboard',explore:'Openings',mistakes:'Mistakes',courses:'Courses',practice:'Practice',settings:'Settings'};
 function segOn(id,v){[...$(id).children].forEach(b=>b.classList.toggle('on',b.dataset.v===v))}
 function go(v){CUR=v;for(const k in TITLES)$('v-'+k).hidden=k!==v;$('title').textContent=TITLES[v];document.querySelectorAll('#nav button,#bnav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
  document.querySelector('.filters').style.visibility=v==='settings'?'hidden':'';try{history.replaceState(null,'','#'+v)}catch(e){}scrollTo(0,0);refresh()}
-function refresh(){renderMe();if(!CACHE&&CUR!=='settings')return;
- if(CUR==='home')home();else if(CUR==='explore')explore();else if(CUR==='mistakes')mistakesPage();else if(CUR==='practice'){renderMods();if(!PR.m.length||!PR.mod)newLine();else renderProg()}else if(CUR==='settings'){$('uIn').value=USER;$('depthV').textContent=DEPTH}}
+function refresh(){renderMe();if(!CACHE&&CUR!=='settings'&&CUR!=='courses')return;
+ if(CUR==='home')home();else if(CUR==='explore')explore();else if(CUR==='mistakes')mistakesPage();else if(CUR==='courses')coursesPage();else if(CUR==='practice'){renderMods();if(!PR.m.length||!PR.mod)newLine();else renderProg()}else if(CUR==='settings'){$('uIn').value=USER;$('depthV').textContent=DEPTH}}
 let lt=0;function refreshLight(){const n=Date.now();if(n-lt<1500)return;lt=n;if(CUR==='home')home();else if(CUR==='mistakes')mistakesPage()}
 function init(){
  $('bnav').innerHTML=$('nav').innerHTML;
  parse();applyF();
  eB=new Board($('eBoard'),{move:(m,d)=>{EX.m.push(C.san(eB.st,m));explore(!d)}});
  pB=new Board($('pBoard'),{move:userMove,locked:()=>PR.busy||PR.done||!PR.exp,side:()=>{const md=curMod();return md?md.c:'w'}});
- const navClick=e=>{const b=e.target.closest('button[data-v]');if(b)go(b.dataset.v)};$('nav').onclick=navClick;$('bnav').onclick=navClick;
+ const navClick=e=>{const b=e.target.closest('button[data-v]');if(b){if(b.dataset.v==='courses'&&CUR==='courses'){CV.view='list'}go(b.dataset.v)}};$('nav').onclick=navClick;$('bnav').onclick=navClick;
  document.addEventListener('click',e=>{const b=e.target.closest('[data-go]');if(b)go(b.dataset.go)});
  const seg=(id,cb)=>$(id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;segOn(id,b.dataset.v);cb(b.dataset.v)});
  seg('fTc',v=>{F.tc=v;applyF();PR.m=[];refresh()});seg('fPer',v=>{F.per=v;applyF();PR.m=[];refresh()});
@@ -340,7 +394,10 @@ function init(){
  $('eRows').onclick=e=>{const r=e.target.closest('.row[data-m]');if(r)exGo(r.dataset.m)};
  document.addEventListener('keydown',e=>{if(CUR==='explore'&&e.target.tagName!=='INPUT'){if(e.key==='ArrowLeft'){EX.m.pop();explore()}}});
  $('mods').onclick=e=>{const b=e.target.closest('.mod');if(!b)return;PR.mod=b.dataset.id;newLine()};
- $('pNext').onclick=newLine;$('pHint').onclick=()=>hint(false);$('pShow').onclick=()=>hint(true);
+ $('pNext').onclick=newLine;
+ cB=new Board($('cBoard'),{move:trainMove,locked:()=>CV.busy||CV.done,side:()=>{const c=CRS.find(x=>x.id===CV.c);return c?c.c:'w'}});
+ $('cList').onclick=cAction;$('cBack').onclick=()=>{CV.view='course';CV.queue=[];coursesPage()};$('cRestart').onclick=()=>startLine(CV.line,CV.mode);$('cNext').onclick=cNext;
+ $('cHint').onclick=()=>{const x=CV.line&&CV.line.mv[CV.i];if(!x||CV.done||!cMine())return;const m=C.fromSan(CV.st,x.san);if(CV.mode==='review'&&CV.tries===0){CV.err++;CV.tries=1}cB.arrow([{from:m.from,to:m.to,col:'#e7b84c'}])};$('pHint').onclick=()=>hint(false);$('pShow').onclick=()=>hint(true);
  $('syncBtn').onclick=()=>sync(!CACHE);
  $('uForm').onsubmit=e=>{e.preventDefault();const u=$('uIn').value.trim();if(!u)return;USER=u;LS.set('user',u);CACHE=LS.get('games:'+u,null);REP=null;PR.m=[];parse();applyF();sync(!CACHE).then(()=>go('home'))};
  $('engRun').onclick=()=>{engQueueRepertoire();$('setMsg').textContent='Engine analysis started; progress shows in the sidebar.'};
