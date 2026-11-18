@@ -50,5 +50,9 @@ function fen(st){let s='';for(let r=7;r>=0;r--){let e=0;for(let f=0;f<8;f++){con
  return s+' '+st.t+' '+(st.c||'-')+' '+(st.ep>=0?sqName(st.ep):'-')+' 0 1'}
 const uci=m=>sqName(m.from)+sqName(m.to)+(m.promo?m.promo.toLowerCase():'');
 function fromUci(st,u){return legal(st).find(m=>uci(m)===u&&(!m.promo||m.promo.toLowerCase()===(u[4]||'q')))||null}
-return{start,legal,make,san,fromSan,play,clean,sqName,inCheck,white,fen,uci,fromUci}})();
+function fromFen(f){const [pos,t,cas,ep]=f.trim().split(/\s+/);const b=Array(64).fill(null);const rows=pos.split('/');if(rows.length!==8)return null;
+ for(let r=0;r<8;r++){let fl=0;for(const ch of rows[r]){if(/\d/.test(ch))fl+=+ch;else{b[(7-r)*8+fl]=ch;fl++}}}
+ const epi=ep&&ep!=='-'?'abcdefgh'.indexOf(ep[0])+8*(+ep[1]-1):-1;return{b,t:t||'w',c:cas&&cas!=='-'?cas:'',ep:epi}}
+function playFrom(st,moves){for(const s of moves){const m=fromSan(st,s);if(!m)return null;st=make(st,m)}return st}
+return{start,legal,make,san,fromSan,play,clean,sqName,inCheck,white,fen,uci,fromUci,fromFen,playFrom}})();
 if(typeof module!=='undefined')module.exports=Chess;
