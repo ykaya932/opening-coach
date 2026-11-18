@@ -98,13 +98,16 @@
   <section class="view" id="v-courses" hidden>
    <div id="cList"></div>
    <div class="playarea" id="cTrain" hidden>
-    <div class="boardwrap"><div class="board" id="cBoard"></div></div>
+    <div class="boardwrap"><div class="evalbar" id="cEval"><i></i><span></span></div><div class="board" id="cBoard"></div></div>
     <div class="panel">
      <div class="ctop"><button class="ib" id="cBack" title="Back to course">◀</button><div><small id="cCh"></small><b id="cName"></b></div><span class="mode" id="cMode"></span></div>
      <div class="coach"><div class="cstat" id="cStatus"></div><div class="cfb" id="cFb"></div></div>
+     <div class="engline" id="cEng"></div>
      <div class="explain" id="cNote"></div>
      <div class="moves" id="cPath"></div>
-     <div class="btns wide"><button class="btn" id="cHint">Hint</button><button class="btn" id="cRestart">Restart line</button><button class="btn pri" id="cNext">Next</button></div>
+     <div class="btns wide" id="cTrainBtns"><button class="btn" id="cHint">Hint</button><button class="btn" id="cRestart">Restart line</button><button class="btn pri" id="cNext">Next</button></div>
+     <div class="anabtns" id="cAna" hidden><button class="ib" data-an="first" title="Start">⏮</button><button class="ib" data-an="prev" title="Back">◀</button><button class="ib" data-an="next" title="Forward">▶</button><button class="ib" data-an="last" title="End">⏭</button><button class="btn" data-an="engine">Engine move</button><button class="btn" data-an="arrow" id="cArrowBtn">Show best move</button><button class="btn" data-an="line">Back to the line</button><button class="btn pri" data-an="exit">Done</button></div>
+     <label class="small tog"><input type="checkbox" id="cEngTog"> Show Stockfish evaluation</label>
      <div class="small" id="cGames"></div>
     </div>
    </div>

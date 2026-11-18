@@ -190,14 +190,18 @@ class Board{
  constructor(el,o){this.el=el;this.o=o;this.st=C.start();this.flip=false;this.sel=-1;this.last=null;this.marks={};this.arrows=[];this.pcs={};
   let h='';for(let s=0;s<64;s++)h+=`<div class="sq" data-s="${s}"></div>`;el.innerHTML=h+'<div class="pcs"></div><svg class="arrows" viewBox="0 0 800 800"></svg>';
   this.sqEls=[...el.querySelectorAll('.sq')];this.pl=el.querySelector('.pcs');this.svg=el.querySelector('svg.arrows');
-  el.addEventListener('pointerdown',e=>this.down(e));el.addEventListener('pointermove',e=>this.move(e));el.addEventListener('pointerup',e=>this.up(e));el.addEventListener('pointercancel',()=>this.cancel())}
+  el.addEventListener('pointerdown',e=>this.down(e));el.addEventListener('contextmenu',e=>e.preventDefault())}
  sqAt(e){const r=this.el.getBoundingClientRect();const x=Math.floor((e.clientX-r.left)/r.width*8),y=Math.floor((e.clientY-r.top)/r.height*8);if(x<0||x>7||y<0||y>7)return-1;const f=this.flip?7-x:x,rk=this.flip?y:7-y;return rk*8+f}
  canMove(s){const p=this.st.b[s];if(!p||(this.o.locked&&this.o.locked()))return false;if(C.white(p)!==(this.st.t==='w'))return false;return!this.o.side||this.o.side()===this.st.t}
- down(e){const s=this.sqAt(e);if(s<0)return;if(this.sel>=0&&this.sel!==s&&this.tryMove(this.sel,s))return;
-  if(this.canMove(s)){this.sel=s;this.drag={s,x:e.clientX,y:e.clientY,el:this.pcs[s],moved:false};this.el.setPointerCapture(e.pointerId);this.paint()}else{this.sel=-1;this.paint()}}
- move(e){const d=this.drag;if(!d||!d.el)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;if(!d.moved&&Math.hypot(dx,dy)<4)return;d.moved=true;d.el.classList.add('drag');d.el.style.transform=`translate(${dx}px,${dy}px) scale(1.12)`}
- up(e){const d=this.drag;this.drag=null;if(!d)return;if(d.el){d.el.classList.remove('drag');d.el.style.transform=''}if(d.moved){const t=this.sqAt(e);if(t>=0&&t!==d.s&&this.tryMove(d.s,t,true))return;}}
- cancel(){const d=this.drag;this.drag=null;if(d&&d.el){d.el.classList.remove('drag');d.el.style.transform=''}}
+ down(e){if(e.button>0)return;const s=this.sqAt(e);if(s<0)return;e.preventDefault();if(this.sel>=0&&this.sel!==s&&this.tryMove(this.sel,s))return;
+  if(this.canMove(s)){this.sel=s;const r=this.el.getBoundingClientRect(),w=r.width/8,[x,y]=xy(s,this.flip);this.drag={s,x:e.clientX,y:e.clientY,ox:r.left+(x+.5)*w,oy:r.top+(y+.5)*w,el:this.pcs[s],moved:false,id:e.pointerId};
+   try{this.el.setPointerCapture(e.pointerId)}catch(_){}
+   const mv=ev=>this.move(ev),up=ev=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);document.removeEventListener('pointercancel',up);if(ev.type==='pointercancel')this.cancel();else this.up(ev)};
+   document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up);document.addEventListener('pointercancel',up);this._doc=true;this.paint()}else{this.sel=-1;this.paint()}}
+ move(e){const d=this.drag;if(!d||!d.el||e.pointerId!==d.id)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;if(!d.moved&&Math.hypot(dx,dy)<5)return;d.moved=true;d.el.classList.add('drag');
+  d.el.style.transform=`translate(${e.clientX-d.ox}px,${e.clientY-d.oy}px) scale(1.15)`;const t=this.sqAt(e);if(t!==d.over){if(d.over>=0&&this.sqEls[d.over])this.sqEls[d.over].classList.remove('over');d.over=t;if(t>=0)this.sqEls[t].classList.add('over')}}
+ up(e){const d=this.drag;this.drag=null;if(!d)return;if(d.over>=0&&this.sqEls[d.over])this.sqEls[d.over].classList.remove('over');if(d.el){d.el.classList.remove('drag');d.el.style.transform=''}if(d.moved){const t=this.sqAt(e);if(t>=0&&t!==d.s&&this.tryMove(d.s,t,true))return;this.paint()}}
+ cancel(){const d=this.drag;this.drag=null;if(d&&d.el){d.el.classList.remove('drag');d.el.style.transform=''}this.paint()}
  tryMove(a,b,dragged){const ms=C.legal(this.st).filter(m=>m.from===a&&m.to===b);if(!ms.length)return false;const m=ms.find(x=>!x.promo||x.promo==='Q');this.sel=-1;this.o.move(m,dragged);return true}
  set(st,o={}){const prev=this.st;this.st=st;if('last'in o)this.last=o.last;if('flip'in o)this.flip=o.flip;this.sel=-1;this.marks={};this.arrows=o.arrows||[];this.paint(o.anim&&!o.noAnim?o.anim:null,o.dragged)}
  paint(anim,dragged){const tg=new Set(),cp=new Set();if(this.sel>=0)for(const m of C.legal(this.st))if(m.from===this.sel){tg.add(m.to);if(m.cap)cp.add(m.to)}
@@ -364,7 +368,7 @@ function courseView(){const c=curC();const s=cstats(c);const chs=c.chapters;
 /* ---- session control ---- */
 function linesWith(c,pred){return c.lines.filter(l=>l.steps.some(x=>x.card&&pred(x.card)))}
 function pickCover(c,keys){const need=new Set(keys),q=[];while(need.size){let best=null,bn=0;for(const l of c.lines){const n=new Set(l.steps.filter(x=>x.card&&need.has(x.card)).map(x=>x.card)).size;if(n>bn){bn=n;best=l}}if(!best)break;q.push(best);best.steps.forEach(x=>x.card&&need.delete(x.card))}return q}
-function startSession(mode,c,lines){CV.c=c.id;CV.mode=mode;CV.q=lines.slice();CV.res={ok:0,bad:0,newL:0,lines:0};CV.view='train';coursesPage();nextLine()}
+function startSession(mode,c,lines){$('cTrainBtns').hidden=false;$('cAna').hidden=true;CV.c=c.id;CV.mode=mode;CV.q=lines.slice();CV.res={ok:0,bad:0,newL:0,lines:0};CV.view='train';coursesPage();nextLine()}
 function startLearn(c,ch){const l=c.lines.find(l=>(ch==null||l.ch===ch)&&l.steps.some(x=>x.card&&cardState(x.card)==='new'));if(!l)return;startSession('learn',c,[l])}
 function startReview(c){const due=Object.keys(c.cards).filter(k=>cardState(k)==='due');startSession('review',c,pickCover(c,due).slice(0,12))}
 function startDrill(c,ch){let L=c.lines.filter(l=>ch==null||l.ch===ch);L=L.map(l=>[l,Math.random()]).sort((a,b)=>a[1]-b[1]).map(x=>x[0]).slice(0,10);startSession('drill',c,L)}
@@ -373,7 +377,7 @@ function nextLine(){const c=curC();if(!CV.q.length){if(CV.mode==='learn'){const 
  CV.line=CV.q.shift();CV.phase='play';CV.newCards=[];beginPass()}
 function beginPass(){const c=curC();CV.i=0;CV.done=false;CV.st=C.start();cB.set(CV.st,{flip:c.c==='b',last:null,arrows:[]});
  $('cNote').className='explain empty';$('cNote').innerHTML=CV.phase==='recap'?'Recap: play the new moves again from memory.':(CV.mode==='learn'?'New moves appear as puzzles. Think first; press <b>Show</b> only if you are stuck. Tip: use <b>▶ Watch</b> in the course list to see a line played out first.':CV.mode==='review'?'Moves that are due are quizzed; the rest play automatically.':'Drill: every move of the line is quizzed.');
- trainRender();setTimeout(cstep,250)}
+ trainRender();cEval();setTimeout(cstep,250)}
 function quizzed(sp){if(!sp.card)return false;if(CV.mode==='drill')return true;if(CV.phase==='recap')return CV.newCards.includes(sp.card);
  if(CV.mode==='review')return cardState(sp.card)==='due';return cardState(sp.card)==='new'||CV.newCards.includes(sp.card)}
 function cstep(){const c=curC(),l=CV.line;trainRender();if(CV.i>=l.steps.length)return lineEnd();
@@ -381,8 +385,8 @@ function cstep(){const c=curC(),l=CV.line;trainRender();if(CV.i>=l.steps.length)
  if(!sp.mine||!quizzed(sp)){CV.busy=true;if(sp.mine)cStatus('Known move','#8fc15a');else cStatus('Opponent to move…','#7c766c');
   setTimeout(()=>{if(CV.line!==l||CV.view!=='train')return;CV.busy=false;cplay(m,sp)},sp.mine?380:550);return}
  CV.tries=0;CV.hint=0;CV.waiting=sp;const isNew=CV.mode==='learn'&&CV.phase==='play'&&cardState(sp.card)==='new'&&!CV.newCards.includes(sp.card);CV.isNew=isNew;
- cStatus(isNew?'New move: find it':'Your move',c.c==='w'?'#fff':'#111');cFb(isNew?'Look at the position and guess. If you are stuck, press Show.':'','');trainRender()}
-function cplay(m,sp,dragged){CV.st=C.make(CV.st,m);cB.set(CV.st,{last:m,anim:m,dragged});const html=moveNote(curC(),sp);const el=$('cNote');
+ cStatus(isNew?'New move: find it':'Your move',c.c==='w'?'#fff':'#111');cEval();cFb(isNew?'Look at the position and guess. If you are stuck, press Show.':'','');trainRender()}
+function cplay(m,sp,dragged){CV.st=C.make(CV.st,m);cB.set(CV.st,{last:m,anim:m,dragged});setTimeout(cEval,0);const html=moveNote(curC(),sp);const el=$('cNote');
  if(html){el.className='explain';el.innerHTML=`<span class="mv">${esc(fmt([sp.san],CV.i))}</span>${html}`}CV.i++;cstep()}
 function trainMove(m,dragged){const sp=CV.waiting;if(!sp||CV.busy)return;const s=C.san(CV.st,m);const c=curC(),card=c.cards[sp.card];
  if(card.alt.has(s)||C.clean(s)===C.clean(sp.san)){CV.waiting=null;const first=CV.tries===0&&CV.hint===0;
@@ -391,7 +395,7 @@ function trainMove(m,dragged){const sp=CV.waiting;if(!sp||CV.busy)return;const s
   else{first?CV.res.ok++:CV.res.bad++;cFb(first?'✓ Correct':'✓ Correct now','ok')}
   const mm=C.fromSan(CV.st,sp.san)&&C.san(CV.st,m)===s?m:C.fromSan(CV.st,sp.san);cplay(m,{...sp,san:s},dragged);cB.mark({[m.to]:'ok'});return}
  CV.tries++;cB.set(CV.st,{});cB.mark({[m.from]:'bad',[m.to]:'bad'});setTimeout(()=>cB.mark({}),700);
- const want=C.fromSan(CV.st,sp.san);
+ const want=C.fromSan(CV.st,sp.san);if(cEngOn){const fb=C.fen(CV.st),wu=C.uci(m),cu=C.uci(want),tries=CV.tries,stp=sp;Eng.cmp(fb,[wu,cu],14,true).then(r=>{if(!r||CV.waiting!==stp||CV.tries!==tries)return;const d=(r.m[cu]??r.bs)-(r.m[wu]??-9999);const el=$('cFb');el.insertAdjacentHTML('beforeend',d<=25?` <span class="engnote">Stockfish: ${esc(s)} is also fine here, but this course plays another move.</span>`:` <span class="engnote">Stockfish: ${esc(s)} is about ${(d/100).toFixed(1)} worse.</span>`)})}
  if(CV.isNew){cB.arrow([{from:want.from,to:want.to,col:'#e7b84c'}]);cFb(`Not ${s}. The move here is ${sp.san}: play it.`,'no')}
  else if(CV.tries>=2){cB.arrow([{from:want.from,to:want.to,col:'#e7b84c'}]);cFb(`Not ${s}. The move is ${sp.san}.`,'no')}
  else cFb(`${s} is not the move. Try once more.`,'no')}
@@ -444,18 +448,71 @@ function features(st,me){const b=st.b,out=[];const W=me==='w';const side=w=>w?'y
  const dbl=c=>pf[c].filter(x=>x>1).length;if(dbl(op))out.push('Their doubled pawns are a weakness to target in the endgame.');
  return out.slice(0,5)}
 function evalWords(s){const a=Math.abs(s),who=s>0?'you':'them';return a<35?'about equal':a<90?`slightly better for ${who}`:a<200?`clearly better for ${who}`:`winning for ${who}`}
-function showPlan(){const c=curC(),l=CV.line;const plan=(c.plans||[])[l.ch];const f=features(CV.st,c.c);const ev=l.ev!=null?(c.c==='w'?l.ev:-l.ev):null;
- const el=$('cNote');el.className='explain plan';
- el.innerHTML=`<h4>Middlegame plan</h4>${plan?`<p>${esc(plan)}</p>`:''}<h5>In this position</h5><ul>${f.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>${ev!=null?`<p class="stat">Stockfish: ${evalTxt(ev)} (${evalWords(ev)}).</p>`:''}${l.pv?`<button class="btn wbtn" id="cCont">▶ Watch how it continues</button>`:''}`;
- const b=$('cCont');if(b)b.onclick=()=>watchCont()}
+const PNAME={P:'pawn',N:'knight',B:'bishop',R:'rook',Q:'queen',K:'king'};
+function describeMove(st,m,prev){const after=C.make(st,m),W=st.t==='w',to=C.sqName(m.to),parts=[];
+ if(m.castle)parts.push(m.castle==='K'?'castles short':'castles long');
+ else if(m.cap){const v=m.ep?'P':st.b[m.to].toUpperCase();if(prev&&prev.cap&&prev.to===m.to)parts.push(v===prev.p&&prev.victim===v?`recaptures on ${to} (${PNAME[v]} trade)`:`recaptures on ${to}`);else parts.push(`takes the ${PNAME[v]} on ${to}`)}
+ else if(m.p==='P'){const f=m.to&7,ek=st.b.indexOf(W?'k':'K'),ekf=ek&7,ekr=ek>>3,home=W?ekr===7:ekr===0;
+  const atk=[m.to+(W?7:-9),m.to+(W?9:-7)].filter(x=>x>=0&&x<64&&Math.abs((x&7)-f)===1).some(x=>st.b[x]===(W?'p':'P'));
+  if(atk)parts.push(`plays the pawn break ${C.san(st,m)}`);else if(home&&Math.abs(f-ekf)<=2&&(ekf>=5||ekf<=2))parts.push('pushes a pawn toward the enemy king');else if(f===3||f===4)parts.push('gains space in the centre');else parts.push(`advances the ${'abcdefgh'[f]}-pawn`)}
+ else if(m.p==='R'){const f=m.to&7;let own=0,opp=0;for(let r=0;r<8;r++){const p=after.b[r*8+f];if(p&&p.toUpperCase()==='P'){if(C.white(p)===W)own++;else opp++}}
+  parts.push(!own&&!opp?`puts the rook on the open ${'abcdefgh'[f]}-file`:!own?`puts the rook on the half-open ${'abcdefgh'[f]}-file`:`brings the rook to ${to}`)}
+ else if(m.p==='Q')parts.push(`brings the queen to ${to}`);
+ else if(m.p==='K')parts.push(`moves the king to ${to}`);
+ else{const back=(m.from>>3)===(W?0:7);parts.push(back?`develops the ${PNAME[m.p]} to ${to}`:`moves the ${PNAME[m.p]} to ${to}`)}
+ if(C.inCheck(after))parts.push('with check');return parts.join(' ')}
+function pvPlan(st,pv,me,start){const mine=[],theirs=[];let s=st,i=start,prev=null;for(const san of pv){const m=C.fromSan(s,san);if(!m)break;const d=`<b>${esc(fmt([san],i))}</b> ${esc(describeMove(s,m,prev))}`;((s.t==='w')===(me==='w')?mine:theirs).push(d);prev={...m,victim:m.cap?(m.ep?'P':s.b[m.to].toUpperCase()):null};s=C.make(s,m);i++}
+ return{mine:mine.slice(0,3),theirs:theirs.slice(0,3)}}
+function showPlan(){const c=curC(),l=CV.line;const f=features(CV.st,c.c);const ev=l.ev!=null?(c.c==='w'?l.ev:-l.ev):null;
+ const pp=l.pv?pvPlan(CV.st,l.pv.split(' '),c.c,l.mv.length):{mine:[],theirs:[]};const el=$('cNote');el.className='explain plan';
+ el.innerHTML=`<h4>Plan from this position</h4>${ev!=null?`<p class="stat" style="margin-top:0">Stockfish: ${evalTxt(ev)}, ${evalWords(ev)}.</p>`:''}
+ ${pp.mine.length?`<h5>Your next moves (engine)</h5><ul>${pp.mine.map(x=>`<li>${x}</li>`).join('')}</ul>`:''}
+ ${pp.theirs.length?`<h5>What your opponent wants</h5><ul>${pp.theirs.map(x=>`<li>${x}</li>`).join('')}</ul>`:''}
+ <h5>Position features</h5><ul>${f.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+ <div class="btns wide" style="margin-top:10px">${l.pv?`<button class="btn wbtn" id="cCont">▶ Watch how it continues</button>`:''}<button class="btn wbtn" id="cAnalyse">♟ Keep playing / analyse</button></div>`;
+ const b=$('cCont');if(b)b.onclick=()=>watchCont();$('cAnalyse').onclick=()=>enterAnalysis()}
+/* ---- live evaluation on the course board ---- */
+let cEngOn=LS.get('ceng',true),cTok=0;
+function cEval(){const bar=$('cEval'),line=$('cEng');bar.hidden=!cEngOn;line.hidden=!cEngOn;if(!cEngOn||!CV.st)return;const c=curC();const st=CV.st,fen=C.fen(st),tok=++cTok;const quiz=!!CV.waiting;
+ const show=E=>{if(tok!==cTok||!E)return;const ws=st.t==='w'?E.s:-E.s,mine=c.c==='w'?ws:-ws;const pct=50+50*Math.tanh(ws/450);bar.querySelector('i').style.height=pct+'%';bar.querySelector('span').textContent=evalTxt(Math.abs(ws)).replace(/^[+−]/,'');bar.classList.toggle('neg',ws<0);
+  const flip=c.c==='b';bar.style.transform=flip?'rotate(180deg)':'';bar.querySelector('span').style.transform=flip?'rotate(180deg)':'';
+  let pvTxt='';if(!quiz&&E.pv){let s=st,pv=[];for(const u of E.pv.slice(0,5)){const m=C.fromUci(s,u);if(!m)break;pv.push(C.san(s,m));s=C.make(s,m)}pvTxt=fmt(pv,CV.mode==='analysis'?AN.cur:CV.i)}
+  line.innerHTML=`<b class="${mine>=0?'up':'down'}">${evalTxt(mine)}</b><span class="pv">${quiz?'<i>best line hidden until you move</i>':esc(pvTxt)}</span><span class="small" style="margin-left:auto">depth ${E.d}</span>`;
+  if(CV.mode==='analysis'&&AN.arrow){const bm=C.fromUci(st,E.b);if(bm)cB.arrow([{from:bm.from,to:bm.to,col:'#8fc15a'}])}};
+ const cached=EC[fen];if(cached)show(cached);else line.innerHTML='<span class="small">Stockfish thinking…</span>';
+ if(!cached||cached.d<18)Eng.live(fen,18,show).then(r=>{if(r)show(r)})}
+/* ---- analysis: keep playing, go back, try other moves ---- */
+const AN={moves:[],cur:0,line:[],arrow:false};
+function anPos(n){return C.play(AN.moves.slice(0,n))}
+function enterAnalysis(){stopWatch();const l=CV.line;CV.mode='analysis';CV.waiting=null;CV.busy=false;CV.done=false;AN.line=l.mv.slice();AN.moves=l.mv.slice();AN.cur=AN.moves.length;AN.arrow=false;
+ $('cTrainBtns').hidden=true;$('cAna').hidden=false;cStatus('Analysis: play any move for either side','#6ea8ff');cFb('Click a move in the list to go back, then try something else. Every move you play gets an engine verdict.','');
+ $('cNote').className='explain empty';$('cNote').innerHTML='Your moves are judged by Stockfish: <b>Best</b>, <b>Good</b>, <b>Inaccuracy</b>, <b>Mistake</b> or <b>Blunder</b>.';anGo(AN.cur)}
+function exitAnalysis(){$('cTrainBtns').hidden=false;$('cAna').hidden=true;CV.mode='drill';CV.view='course';coursesPage()}
+function anGo(n){n=Math.max(0,Math.min(AN.moves.length,n));AN.cur=n;CV.st=anPos(n);let lm=null;if(n){const p=anPos(n-1);lm=C.fromSan(p,AN.moves[n-1])}cB.set(CV.st,{last:lm,flip:curC().c==='b'});anRender();cEval()}
+function anRender(){const l=CV.line;$('cMode').className='mode analysis';$('cMode').textContent='Analysis';$('cCh').textContent=curC().name+' · '+curC().chapters[l.ch];$('cName').textContent=l.name;
+ let dev=AN.moves.findIndex((x,i)=>x!==AN.line[i]);if(dev<0)dev=AN.moves.length;
+ $('cPath').innerHTML=AN.moves.map((x,i)=>(i%2===0?`<span class="no">${i/2+1}.</span>`:'')+`<button data-ai="${i+1}" class="${i===AN.cur-1?'cur':''} ${i>=dev?'var':''}">${esc(x)}</button>`).join('')||'<span class="no">Start position</span>';
+ $('cArrowBtn').textContent=AN.arrow?'Hide best move':'Show best move'}
+const verdict=loss=>loss<=15?['Best','#8fc15a']:loss<=50?['Good','#8fc15a']:loss<=110?['Inaccuracy','#e7b84c']:loss<=250?['Mistake','#f08a4b']:['Blunder','#f06b54'];
+function anMove(m,dragged){const before=CV.st,fb=C.fen(before),san=C.san(before,m),u=C.uci(m),n=AN.cur;
+ if(AN.moves[n]===san)AN.cur++;else{AN.moves=AN.moves.slice(0,n).concat(san);AN.cur=n+1}
+ CV.st=C.make(before,m);cB.set(CV.st,{last:m,anim:dragged?null:m,dragged});anRender();cEval();
+ cFb(`${fmt([san],n)}: checking…`,'');Eng.cmp(fb,[u],16,true).then(r=>{if(!r||AN.cur!==n+1||AN.moves[n]!==san)return;const loss=Math.max(0,r.bs-(r.m[u]??r.bs));const [v,col]=verdict(loss);const bm=C.fromUci(before,r.b),bs=bm?C.san(before,bm):'';
+  $('cFb').className='cfb';$('cFb').innerHTML=`<b style="color:${col}">${esc(fmt([san],n))}: ${v}</b>${loss>15&&bs&&bs!==san?` · best was <b>${esc(bs)}</b> (${(loss/100).toFixed(1)} better)`:''}${AN.line[n]&&AN.line[n]!==san&&AN.moves.slice(0,n).every((x,i)=>x===AN.line[i])?` · the course plays <b>${esc(AN.line[n])}</b>`:''}`})}
+function anAction(e){const b=e.target.closest('[data-an]');if(!b)return;const k=b.dataset.an;
+ if(k==='first')anGo(0);else if(k==='prev')anGo(AN.cur-1);else if(k==='next')anGo(AN.cur+1);else if(k==='last')anGo(AN.moves.length);
+ else if(k==='arrow'){AN.arrow=!AN.arrow;if(!AN.arrow)cB.arrow([]);anRender();cEval()}
+ else if(k==='engine'){const E=EC[C.fen(CV.st)];if(E){const m=C.fromUci(CV.st,E.b);if(m)anMove(m)}else{cFb('Wait for the engine to finish thinking, then try again.','')}}
+ else if(k==='line'){AN.moves=AN.line.slice();anGo(AN.moves.length)}
+ else if(k==='exit')exitAnalysis()}
 let WT=null;
-function watchSeq(sans,onStep,done,delay=1100){let i=0;const tick=()=>{if(i>=sans.length){WT=null;return done&&done()}const m=C.fromSan(CV.st,sans[i]);if(!m){WT=null;return done&&done()}const san=sans[i++];CV.st=C.make(CV.st,m);cB.set(CV.st,{last:m,anim:m});onStep&&onStep(san,i);WT=setTimeout(tick,delay)};WT=setTimeout(tick,400)}
+function watchSeq(sans,onStep,done,delay=1100){let i=0;const tick=()=>{if(i>=sans.length){WT=null;return done&&done()}const m=C.fromSan(CV.st,sans[i]);if(!m){WT=null;return done&&done()}const san=sans[i++];CV.st=C.make(CV.st,m);cB.set(CV.st,{last:m,anim:m});onStep&&onStep(san,i);cEval();WT=setTimeout(tick,delay)};WT=setTimeout(tick,400)}
 function stopWatch(){if(WT){clearTimeout(WT);WT=null}}
 function watchCont(){const l=CV.line,base=CV.st;const pv=l.pv.split(' ');CV.busy=true;cStatus('Engine continuation','#6ea8ff');const shown=[];
  $('cCont').disabled=true;
  watchSeq(pv,san=>{shown.push(san);cFb(fmt(shown,l.mv.length),'')},()=>{CV.busy=false;cStatus('This is the kind of position you are aiming for','#6ea8ff');
   const el=$('cNote');el.insertAdjacentHTML('beforeend',`<button class="btn wbtn" id="cBackEnd">↺ Back to the end of the line</button>`);$('cBackEnd').onclick=()=>{CV.st=base;cB.set(CV.st,{last:null});cStatus(CV.mode==='watch'?'Watched':'Line complete','#8fc15a');cFb('','');showPlan()}})}
-function startWatch(c,l){CV.c=c.id;CV.mode='watch';CV.q=[];CV.line=l;CV.view='train';CV.phase='play';CV.newCards=[];coursesPage();CV.i=0;CV.done=false;CV.st=C.start();CV.waiting=null;
+function startWatch(c,l){$('cTrainBtns').hidden=false;$('cAna').hidden=true;CV.c=c.id;CV.mode='watch';CV.q=[];CV.line=l;CV.view='train';CV.phase='play';CV.newCards=[];coursesPage();CV.i=0;CV.done=false;CV.st=C.start();CV.waiting=null;
  cB.set(CV.st,{flip:c.c==='b',last:null});$('cNote').className='explain empty';$('cNote').innerHTML='Watch mode: the whole line plays by itself with the explanations. Then you get the middlegame plan.';trainRender();cStatus('Watching','#6ea8ff');CV.busy=true;
  watchSeq(l.mv,(san,i)=>{CV.i=i;const sp=l.steps[i-1];const html=moveNote(c,sp);if(html){$('cNote').className='explain';$('cNote').innerHTML=`<span class="mv">${esc(fmt([san],i-1))}</span>${html}`}trainRender()},()=>{CV.busy=false;CV.done=true;cStatus('Watched','#8fc15a');trainRender();showPlan()},html=>0)}
 function updateBadge(){const n=totalDue();document.querySelectorAll('[data-v=courses]').forEach(b=>{let s=b.querySelector('.badge');if(!s){s=document.createElement('i');s.className='badge';b.appendChild(s)}s.textContent=n||'';s.hidden=!n})}
@@ -485,8 +542,11 @@ function init(){
  document.addEventListener('keydown',e=>{if(CUR==='explore'&&e.target.tagName!=='INPUT'){if(e.key==='ArrowLeft'){EX.m.pop();explore()}}});
  $('mods').onclick=e=>{const b=e.target.closest('.mod');if(!b)return;PR.mod=b.dataset.id;newLine()};
  $('pNext').onclick=newLine;
- cB=new Board($('cBoard'),{move:trainMove,locked:()=>CV.busy||!CV.waiting,side:()=>{const c=curC();return c?c.c:'w'}});
- $('cList').onclick=cAction;$('cBack').onclick=()=>{stopWatch();CV.busy=false;CV.view='course';CV.q=[];CV.waiting=null;coursesPage()};$('cRestart').onclick=()=>{stopWatch();CV.busy=false;if(CV.mode==='watch')return startWatch(curC(),CV.line);CV.phase='play';CV.newCards=CV.newCards.filter(k=>SRS[k]);beginPass()};
+ cB=new Board($('cBoard'),{move:(m,d)=>CV.mode==='analysis'?anMove(m,d):trainMove(m,d),locked:()=>CV.mode==='analysis'?false:(CV.busy||!CV.waiting),side:()=>{if(CV.mode==='analysis')return cB.st.t;const c=curC();return c?c.c:'w'}});
+ $('cAna').onclick=anAction;$('cPath').onclick=e=>{const b=e.target.closest('[data-ai]');if(b&&CV.mode==='analysis')anGo(+b.dataset.ai)};
+ $('cEngTog').checked=cEngOn;$('cEngTog').onchange=e=>{cEngOn=e.target.checked;LS.set('ceng',cEngOn);if(!cEngOn)cB.arrow([]);cEval()};
+ document.addEventListener('keydown',e=>{if(CUR==='courses'&&CV.mode==='analysis'&&CV.view==='train'&&e.target.tagName!=='INPUT'){if(e.key==='ArrowLeft')anGo(AN.cur-1);if(e.key==='ArrowRight')anGo(AN.cur+1)}});
+ $('cList').onclick=cAction;$('cBack').onclick=()=>{$('cTrainBtns').hidden=false;$('cAna').hidden=true;stopWatch();CV.busy=false;CV.view='course';CV.q=[];CV.waiting=null;coursesPage()};$('cRestart').onclick=()=>{stopWatch();CV.busy=false;if(CV.mode==='watch')return startWatch(curC(),CV.line);CV.phase='play';CV.newCards=CV.newCards.filter(k=>SRS[k]);beginPass()};
  $('cNext').onclick=()=>{stopWatch();CV.busy=false;if(CV.mode==='watch'){CV.view='course';return coursesPage()}if(!CV.done&&CV.mode==='learn'){CV.newCards=[]}CV.waiting=null;nextLine()};$('cHint').onclick=cHint;updateBadge();setInterval(updateBadge,60000);
  $('syncBtn').onclick=()=>sync(!CACHE);
  $('uForm').onsubmit=e=>{e.preventDefault();const u=$('uIn').value.trim();if(!u)return;USER=u;LS.set('user',u);CACHE=LS.get('games:'+u,null);REP=null;PR.m=[];parse();applyF();sync(!CACHE).then(()=>go('home'))};
