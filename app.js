@@ -325,68 +325,109 @@ function hint(show){const e=PR.exp;if(!e)return;const m=C.fromSan(pB.st,e.x);if(
  if(PR.tries===0){PR.lineErr++;prog.mist[key]=(prog.mist[key]||0)+1;saveProg()}PR.tries=Math.max(PR.tries,1);
  if(show){userMove(m);return}pB.arrow([{from:m.from,to:m.to,col:'#e7b84c'}]);fb(e.why==='engine'?`Engine suggestion. Your usual ${e.yours} costs ${(e.loss/100).toFixed(1)} pawns here.`:e.a.length>1?`Also fine: ${e.a.filter(x=>x!==e.x).join(', ')}`:'Follow the arrow.')}
 
-/* ================= courses (spaced repetition) ================= */
-const SRS=LS.get('srs',{});const saveSRS=()=>LS.set('srs',SRS);
-const IV=[4/24,1,3,7,16,35,90];
-function parseLine(s){const out=[];const re=/\{([^}]*)\}|(\S+)/g;let m;while((m=re.exec(s))){if(m[1]!=null){if(out.length)out[out.length-1].note=m[1].trim()}else out.push({san:m[2]})}return out}
-const CRS=(typeof COURSES!=='undefined'?COURSES:[]).map(c=>({...c,lines:c.lines.map(l=>{const mv=parseLine(l.moves);mv.forEach((x,i)=>{if(!x.note&&c.notes){const k=mv.slice(0,i+1).map(y=>y.san).join(' ');if(c.notes[k])x.note=c.notes[k]}});return{...l,mv,course:c.id}})}));
-const allLines=()=>CRS.flatMap(c=>c.lines);
-const lstate=l=>{const s=SRS[l.id];return!s?'new':s.due<=Date.now()?'due':'ok'};
-const SCOL={new:'#6f685e',due:'#e7b84c',ok:'#8fc15a'};
-const dueIn=d=>{const h=(d-Date.now())/36e5;return h<1?'soon':h<24?Math.round(h)+' h':Math.round(h/24)+' d'};
-const CV={view:'list',c:null,line:null,mode:'learn',st:null,i:0,err:0,tries:0,queue:[],busy:false,done:false};let cB;
-function coursesPage(){$('cList').hidden=CV.view==='train';$('cTrain').hidden=CV.view!=='train';if(CV.view==='list')courseList();else if(CV.view==='course')courseView();else trainRender()}
-function courseList(){$('cList').innerHTML=`<p class="intro">Learn complete opening lines with explanations, then review them on a spaced-repetition schedule: lines you know come back less often, lines you miss come back sooner.</p><div class="clist">`+CRS.map(c=>{const L=c.lines,n=L.filter(l=>lstate(l)!=='new').length,d=L.filter(l=>lstate(l)==='due').length;const st=C.play(c.pos.split(' '));
- return`<div class="ccard"><div class="cv">${mini(st,c.c==='b')}<div><h3>${esc(c.name)}</h3><div class="side">${c.c==='w'?'You play White':'You play Black'} · ${L.length} lines</div></div></div><div class="cb"><p>${esc(c.blurb)}</p>
- <div class="pbar2"><i style="width:${L.filter(l=>lstate(l)==='ok').length/L.length*100}%;background:var(--acc)"></i><i style="width:${d/L.length*100}%;background:var(--gold)"></i></div>
- <div class="cprog"><span><b>${n}</b>/${L.length} learned</span>·<span><b>${d}</b> due for review</span></div>
- <div class="btns wide"><button class="btn" data-open="${c.id}">Open</button>${d?`<button class="btn pri" data-rev="${c.id}">Review ${d}</button>`:n<L.length?`<button class="btn pri" data-learn="${c.id}">Learn next</button>`:`<button class="btn" data-rev="${c.id}">Review all</button>`}</div></div></div>`}).join('')+'</div>'}
-function gamesFollowing(l,c){const sans=l.mv.map(x=>x.san);let best=0,n=0;const gs=GS.filter(g=>g.c===c);for(let d=Math.min(16,sans.length);d>=4;d--){const k=gs.filter(g=>pre(g,sans.slice(0,d))).length;if(k){best=d;n=k;break}}return{d:best,n}}
-function courseView(){const c=CRS.find(x=>x.id===CV.c);const ch=[...new Set(c.lines.map(l=>l.ch))];
- $('cList').innerHTML=`<div class="chead"><button class="ib" data-back="1">◀</button><h2>${esc(c.name)}</h2><div class="btns"><button class="btn" data-learn="${c.id}">Learn next</button><button class="btn pri" data-rev="${c.id}">Review due</button></div></div><div class="cintro">${esc(c.intro)}</div>`+
- ch.map(h=>`<div class="chap"><h3>${esc(h)}</h3>`+c.lines.filter(l=>l.ch===h).map(l=>{const s=lstate(l),r=SRS[l.id],f=gamesFollowing(l,c.c);
-  return`<button class="lrow" data-line="${l.id}"><span class="st" style="background:${SCOL[s]}"></span><span><b>${esc(l.name)}</b><small>${esc(fmt(l.mv.map(x=>x.san)))}</small></span><span class="yg">${f.n>=2?`your games: ${f.n} reach move ${Math.ceil(f.d/2)}`:''}</span><span class="lv">${s==='new'?'new':s==='due'?'due now':'next in '+dueIn(r.due)}${r?`<br>level ${r.lv+1}`:''}</span></button>`}).join('')+'</div>').join('')}
-function startLine(l,mode){CV.view='train';CV.line=l;CV.c=l.course;CV.mode=mode;CV.i=0;CV.err=0;CV.tries=0;CV.done=false;const c=CRS.find(x=>x.id===l.course);
- CV.st=C.start();cB.set(CV.st,{flip:c.c==='b',last:null});coursesPage();$('cNote').className='explain empty';$('cNote').innerHTML=esc(l.intro||'Play through the line. Your moves are shown with a gold arrow in Learn mode.');trainStep()}
-const cMine=()=>{const c=CRS.find(x=>x.id===CV.c);return(CV.st.t==='w')===(c.c==='w')};
-function trainRender(){const l=CV.line,c=CRS.find(x=>x.id===CV.c);$('cCh').textContent=c.name+' · '+l.ch;$('cName').textContent=l.name;
- $('cMode').className='mode '+CV.mode;$('cMode').textContent=CV.mode==='learn'?'Learn':'Review'+(CV.queue.length?` · ${CV.queue.length} left`:'');
- $('cPath').innerHTML=l.mv.slice(0,CV.i).map((x,i)=>(i%2===0?`<span class="no">${i/2+1}.</span>`:'')+`<button class="${i===CV.i-1?'cur':''}" tabindex="-1">${esc(x.san)}</button>`).join('')||'<span class="no">Starting position</span>';
- const sans=l.mv.slice(0,CV.i).map(x=>x.san);const n=CV.i>=2?GS.filter(g=>g.c===c.c&&pre(g,sans)).length:0;$('cGames').textContent=CV.i>=2?(n?`You have reached this position in ${n} of your games.`:'You have not reached this position in your games yet.'):'';
- $('cNext').textContent=CV.done?(CV.queue.length?'Next review':'Next line'):'Skip line';}
-function cNote(i){const x=CV.line.mv[i];if(!x)return;const el=$('cNote');if(x.note){el.className='explain';el.innerHTML=`<span class="mv">${esc(fmt([x.san],i))}</span>${esc(x.note)}`}}
+/* ================= courses: Learn (guess first), Review (spaced repetition per move), Drill ================= */
+const IV=[4/24,1,3,7,16,35,90,180];
+const SRS=LS.get('srs2',{});const saveSRS=()=>LS.set('srs2',SRS);
+const CST=LS.get('cstats',{});const saveCST=()=>LS.set('cstats',CST);
+const fen4=st=>C.fen(st).split(' ').slice(0,4).join(' ');
+const CRS=(typeof COURSES!=='undefined'?COURSES:[]).map(c=>{const cards={};const lines=c.lines.map((l,li)=>{const mv=l.moves.split(' ');let st=C.start();const steps=[];
+  const skip=c.root?c.root.split(' ').length:0;mv.forEach((san,i)=>{const mine=(st.t==='w')===(c.c==='w');const key=mv.slice(0,i+1).join(' ');let card=null;
+   if(mine&&i>=skip){const k=c.id+'|'+fen4(st);card=k;if(!cards[k])cards[k]={k,san,alt:new Set([san]),lines:new Set(),ch:l.ch};cards[k].alt.add(san);cards[k].lines.add(li)}
+   steps.push({san,mine,card,key,prev:mv.slice(0,i).join(' ')});st=C.make(st,C.fromSan(st,san))});
+  return{...l,i:li,mv,steps,course:c.id}});return{...c,lines,cards}});
+const cardState=k=>{const s=SRS[k];return!s?'new':s.due<=Date.now()?'due':'ok'};
+function cstats(c,ch){const ks=Object.values(c.cards).filter(x=>ch==null||x.ch===ch).map(x=>x.k);const o={total:ks.length,new:0,due:0,ok:0};for(const k of ks)o[cardState(k)]++;o.learned=o.total-o.new;return o}
+const dueIn=d=>{const h=(d-Date.now())/36e5;return h<=0?'now':h<1?Math.max(1,Math.round(h*60))+' min':h<23.5?Math.round(h)+' h':Math.round(h/24)+' d'};
+function moveNote(c,step){const parts=[];const n=c.notes&&c.notes[step.key];if(n)parts.push(esc(n));const a=c.ann&&c.ann[step.prev+'|'+step.san];
+ if(a){if(a.opp){if(a.loss!=null&&a.loss>=100)parts.push(`<span class="warn">Mistake by your opponent</span> (about ${(a.loss/100).toFixed(1)} pawns). Punish it!`);else if(a.loss!=null&&a.loss>=50)parts.push(`<span class="warn">Inaccuracy</span> by your opponent (about ${(a.loss/100).toFixed(1)}).`);if(a.n>=3)parts.push(`<span class="stat">You have faced this ${a.n} times in your games.</span>`)}
+  else{if(a.habit){const h=a.habit;parts.push(h.loss!=null&&h.loss>=35?`<span class="stat">In your games you played ${esc(h.mv)} here (${h.n}×, scoring ${pc(h.p)}). Stockfish rates it about ${(h.loss/100).toFixed(1)} pawns worse.</span>`:`<span class="stat">In your games you usually played ${esc(h.mv)} here (${h.n}×). Both are fine; this course uses ${esc(step.san)}.</span>`)}
+   const pa=c.ann[step.prev.split(' ').slice(0,-1).join(' ')+'|'+step.prev.split(' ').slice(-1)[0]];if(pa&&pa.opp&&pa.loss>=100)parts.push('<span class="good">This punishes the mistake.</span>')}}
+ return parts.join(' ')}
+const CV={view:'list',c:null,ch:null,mode:null,q:[],line:null,i:0,st:null,phase:'play',busy:false,done:false,tries:0,hint:0,newCards:[],res:{ok:0,bad:0,newL:0},waiting:null};let cB;
+const curC=()=>CRS.find(x=>x.id===CV.c);
+function coursesPage(){document.body.classList.toggle('training',CV.view==='train');updateBadge();$('cList').hidden=CV.view==='train';$('cTrain').hidden=CV.view!=='train';if(CV.view==='list')courseList();else if(CV.view==='course')courseView();else trainRender()}
+function totalDue(){return CRS.reduce((s,c)=>s+cstats(c).due,0)}
+function courseList(){const td=totalDue();
+ $('cList').innerHTML=`<p class="intro">Each course is a tree of lines built from the openings you play. <b>Learn</b> introduces new moves as puzzles: find the move before you see it. <b>Review</b> brings back each move you've learned on a spaced-repetition schedule. <b>Drill</b> is free practice of a chapter or a whole course.${td?` You have <b>${td}</b> moves due for review.`:''}</p><div class="clist">`+CRS.map(c=>{const s=cstats(c);const st=C.play(c.pos.split(' '));
+ return`<div class="ccard"><div class="cv">${mini(st,c.c==='b')}<div><h3>${esc(c.name)}</h3><div class="cside">${c.c==='w'?'White':'Black'} · ${c.lines.length} lines · ${s.total} moves to learn</div></div></div><div class="cb"><p>${esc(c.blurb)}</p>
+ <div class="pbar2"><i style="width:${s.ok/s.total*100}%;background:var(--acc)"></i><i style="width:${s.due/s.total*100}%;background:var(--gold)"></i></div>
+ <div class="cprog"><span><b>${s.learned}</b>/${s.total} moves learned</span>·<span><b>${s.due}</b> due</span></div>
+ <div class="btns wide"><button class="btn" data-open="${c.id}">Open</button>${s.due?`<button class="btn pri" data-review="${c.id}">Review ${s.due}</button>`:s.new?`<button class="btn pri" data-learn="${c.id}">Learn</button>`:`<button class="btn" data-drill="${c.id}">Drill</button>`}</div></div></div>`}).join('')+'</div>'}
+function courseView(){const c=curC();const s=cstats(c);const chs=c.chapters;
+ $('cList').innerHTML=`<div class="chead"><button class="ib" data-back="1">◀</button><div><h2>${esc(c.name)}</h2><div class="small">${c.c==='w'?'You play White':'You play Black'} · ${c.lines.length} lines · ${s.learned}/${s.total} moves learned · ${s.due} due</div></div></div>
+ <div class="modes"><button class="mbtn" data-learn="${c.id}" ${s.new?'':'disabled'}><b>Learn</b><span>${s.new} new moves</span></button><button class="mbtn pri" data-review="${c.id}" ${s.due?'':'disabled'}><b>Review</b><span>${s.due?s.due+' due now':'nothing due'+(s.learned?` · next in ${dueIn(Math.min(...Object.keys(c.cards).filter(k=>SRS[k]).map(k=>SRS[k].due)))}`:'')}</span></button><button class="mbtn" data-drill="${c.id}"><b>Drill</b><span>random lines, all moves</span></button></div>
+ <div class="cintro">${esc(c.intro)}</div>`+
+ chs.map((h,ci)=>{const cs=cstats(c,ci);const L=c.lines.filter(l=>l.ch===ci);if(!L.length)return'';
+  return`<details class="chap" ${CV.ch===ci?'open':''}><summary><span class="chn">${esc(h)}</span><span class="chs">${L.length} lines · ${cs.learned}/${cs.total}${cs.due?` · <b class="gold">${cs.due} due</b>`:''}</span><span class="cbtns"><button class="chip" data-learnch="${ci}" ${cs.new?'':'disabled'}>Learn</button><button class="chip" data-drillch="${ci}">Drill</button></span></summary>`+
+  L.map(l=>{const ks=[...new Set(l.steps.filter(x=>x.card).map(x=>x.card))];const st=ks.map(cardState);const state=st.includes('due')?'due':st.includes('new')?(st.every(x=>x==='new')?'new':'part'):'ok';
+   return`<button class="lrow" data-line="${l.i}"><span class="st ${state}"></span><span><b>${esc(l.name)}</b><small>${esc(fmt(l.mv))}</small></span><span class="lv">${state==='new'?'new':state==='part'?'in progress':state==='due'?'due':'learned'}</span></button>`}).join('')+'</details>'}).join('')}
+/* ---- session control ---- */
+function linesWith(c,pred){return c.lines.filter(l=>l.steps.some(x=>x.card&&pred(x.card)))}
+function pickCover(c,keys){const need=new Set(keys),q=[];while(need.size){let best=null,bn=0;for(const l of c.lines){const n=new Set(l.steps.filter(x=>x.card&&need.has(x.card)).map(x=>x.card)).size;if(n>bn){bn=n;best=l}}if(!best)break;q.push(best);best.steps.forEach(x=>x.card&&need.delete(x.card))}return q}
+function startSession(mode,c,lines){CV.c=c.id;CV.mode=mode;CV.q=lines.slice();CV.res={ok:0,bad:0,newL:0,lines:0};CV.view='train';coursesPage();nextLine()}
+function startLearn(c,ch){const l=c.lines.find(l=>(ch==null||l.ch===ch)&&l.steps.some(x=>x.card&&cardState(x.card)==='new'));if(!l)return;startSession('learn',c,[l])}
+function startReview(c){const due=Object.keys(c.cards).filter(k=>cardState(k)==='due');startSession('review',c,pickCover(c,due).slice(0,12))}
+function startDrill(c,ch){let L=c.lines.filter(l=>ch==null||l.ch===ch);L=L.map(l=>[l,Math.random()]).sort((a,b)=>a[1]-b[1]).map(x=>x[0]).slice(0,10);startSession('drill',c,L)}
+function nextLine(){const c=curC();if(!CV.q.length){if(CV.mode==='learn'){const more=c.lines.find(l=>l.steps.some(x=>x.card&&cardState(x.card)==='new'));if(more&&CV.res.lines<50){CV.q=[more]}}
+  if(!CV.q.length)return sessionEnd()}
+ CV.line=CV.q.shift();CV.phase='play';CV.newCards=[];beginPass()}
+function beginPass(){const c=curC();CV.i=0;CV.done=false;CV.st=C.start();cB.set(CV.st,{flip:c.c==='b',last:null,arrows:[]});
+ $('cNote').className='explain empty';$('cNote').innerHTML=CV.phase==='recap'?'Recap: play the new moves again from memory.':(CV.mode==='learn'?'New moves appear as puzzles. Think first; press <b>Show</b> only if you are stuck.':CV.mode==='review'?'Moves that are due are quizzed; the rest play automatically.':'Drill: every move of the line is quizzed.');
+ trainRender();setTimeout(cstep,250)}
+function quizzed(sp){if(!sp.card)return false;if(CV.mode==='drill')return true;if(CV.phase==='recap')return CV.newCards.includes(sp.card);
+ if(CV.mode==='review')return cardState(sp.card)==='due';return cardState(sp.card)==='new'||CV.newCards.includes(sp.card)}
+function cstep(){const c=curC(),l=CV.line;trainRender();if(CV.i>=l.steps.length)return lineEnd();
+ const sp=l.steps[CV.i],m=C.fromSan(CV.st,sp.san);
+ if(!sp.mine||!quizzed(sp)){CV.busy=true;if(sp.mine)cStatus('Known move','#8fc15a');else cStatus('Opponent to move…','#7c766c');
+  setTimeout(()=>{if(CV.line!==l||CV.view!=='train')return;CV.busy=false;cplay(m,sp)},sp.mine?380:550);return}
+ CV.tries=0;CV.hint=0;CV.waiting=sp;const isNew=CV.mode==='learn'&&CV.phase==='play'&&cardState(sp.card)==='new'&&!CV.newCards.includes(sp.card);CV.isNew=isNew;
+ cStatus(isNew?'New move: find it':'Your move',c.c==='w'?'#fff':'#111');cFb(isNew?'Look at the position and guess. If you are stuck, press Show.':'','');trainRender()}
+function cplay(m,sp,dragged){CV.st=C.make(CV.st,m);cB.set(CV.st,{last:m,anim:m,dragged});const html=moveNote(curC(),sp);const el=$('cNote');
+ if(html){el.className='explain';el.innerHTML=`<span class="mv">${esc(fmt([sp.san],CV.i))}</span>${html}`}CV.i++;cstep()}
+function trainMove(m,dragged){const sp=CV.waiting;if(!sp||CV.busy)return;const s=C.san(CV.st,m);const c=curC(),card=c.cards[sp.card];
+ if(card.alt.has(s)||C.clean(s)===C.clean(sp.san)){CV.waiting=null;const first=CV.tries===0&&CV.hint===0;
+  if(CV.isNew){CV.newCards.push(sp.card);CV.res.newL++;cFb(first?'✓ Found it!':'✓ Now you know it.','ok')}
+  else if(CV.mode==='review'||CV.phase==='recap'){const r=SRS[sp.card]||{lv:-1,fails:0};if(first){r.lv=Math.min(IV.length-1,(CV.phase==='recap'?-1:r.lv)+1);r.due=Date.now()+IV[r.lv]*864e5}else{r.lv=0;r.fails=(r.fails||0)+1;r.due=Date.now()+10*6e4}SRS[sp.card]=r;saveSRS();first?CV.res.ok++:CV.res.bad++;cFb(first?`✓ Correct · next review in ${dueIn(r.due)}`:'✓ Correct now · it comes back in 10 min','ok')}
+  else{first?CV.res.ok++:CV.res.bad++;cFb(first?'✓ Correct':'✓ Correct now','ok')}
+  const mm=C.fromSan(CV.st,sp.san)&&C.san(CV.st,m)===s?m:C.fromSan(CV.st,sp.san);cplay(m,{...sp,san:s},dragged);cB.mark({[m.to]:'ok'});return}
+ CV.tries++;cB.set(CV.st,{});cB.mark({[m.from]:'bad',[m.to]:'bad'});setTimeout(()=>cB.mark({}),700);
+ const want=C.fromSan(CV.st,sp.san);
+ if(CV.isNew){cB.arrow([{from:want.from,to:want.to,col:'#e7b84c'}]);cFb(`Not ${s}. The move here is ${sp.san}: play it.`,'no')}
+ else if(CV.tries>=2){cB.arrow([{from:want.from,to:want.to,col:'#e7b84c'}]);cFb(`Not ${s}. The move is ${sp.san}.`,'no')}
+ else cFb(`${s} is not the move. Try once more.`,'no')}
+function cHint(){const sp=CV.waiting;if(!sp)return;const want=C.fromSan(CV.st,sp.san);CV.hint++;
+ if(CV.hint===1&&!CV.isNew){cB.mark({[want.from]:'hint'});cFb('Hint: this piece moves.','')}else{cB.arrow([{from:want.from,to:want.to,col:'#e7b84c'}]);cFb(CV.isNew?`The move is ${sp.san}. Play it on the board.`:`The move is ${sp.san}.`,'')}}
+function lineEnd(){const c=curC();CV.res.lines++;updateBadge();
+ if(CV.mode==='learn'&&CV.phase==='play'&&CV.newCards.length){CV.phase='recap';cStatus('Line done: now the recap','#e7b84c');cFb(`${CV.newCards.length} new move${CV.newCards.length>1?'s':''}. Play them again without help.`,'ok');setTimeout(beginPass,1400);return}
+ if(CV.mode==='drill'){const k=CV.line.course+'|'+CV.line.i;CST[k]=(CST[k]||0)+1;saveCST()}
+ CV.done=true;cStatus(CV.q.length||CV.mode==='learn'?'Line complete':'Session complete','#8fc15a');trainRender()}
+function sessionEnd(){CV.view='course';const r=CV.res;coursesPage();const msg=CV.mode==='learn'?`Learned ${r.newL} new moves.`:`${r.ok} correct${r.bad?`, ${r.bad} missed`:''} in ${r.lines} lines.`;$('cList').insertAdjacentHTML('afterbegin',`<div class="toastbox">${esc(msg)}</div>`)}
+function trainRender(){const c=curC(),l=CV.line;if(!c||!l)return;$('cCh').textContent=c.name+' · '+c.chapters[l.ch];$('cName').textContent=l.name;
+ $('cMode').className='mode '+CV.mode;$('cMode').textContent=(CV.mode==='learn'?(CV.phase==='recap'?'Recap':'Learn'):CV.mode==='review'?'Review':'Drill')+(CV.q.length?` · ${CV.q.length} more`:'');
+ $('cPath').innerHTML=l.mv.slice(0,CV.i).map((x,i)=>(i%2===0?`<span class="no">${i/2+1}.</span>`:'')+`<button class="${i===CV.i-1?'cur':''}" tabindex="-1">${esc(x)}</button>`).join('')||'<span class="no">Starting position</span>';
+ const sans=l.mv.slice(0,CV.i);const n=CV.i>=2?GS.filter(g=>g.c===c.c&&pre(g,sans)).length:0;$('cGames').textContent=CV.i>=2&&n?`You have reached this position in ${n} of your games.`:'';
+ $('cNext').textContent=CV.done?(CV.q.length||CV.mode==='learn'?'Next line':'Finish'):'Skip line';$('cHint').textContent=CV.waiting&&CV.isNew?'Show':'Hint';$('cHint').disabled=!CV.waiting}
 function cStatus(t,col){$('cStatus').innerHTML=`<span class="dot" style="background:${col}"></span>${esc(t)}`}
 function cFb(t,k){$('cFb').className='cfb '+(k||'');$('cFb').textContent=t}
-function trainStep(){const l=CV.line;trainRender();if(CV.i>=l.mv.length)return trainEnd();
- const x=l.mv[CV.i],m=C.fromSan(CV.st,x.san);if(!m){cFb('This line has an error.','no');return}
- if(!cMine()){CV.busy=true;cStatus('Opponent to move…','#7c766c');setTimeout(()=>{if(CV.line!==l||CV.view!=='train')return;CV.busy=false;CV.st=C.make(CV.st,m);cB.set(CV.st,{last:m,anim:m});cNote(CV.i);CV.i++;trainStep()},CV.i===0?300:600);return}
- CV.tries=0;const c=CRS.find(z=>z.id===CV.c);cStatus(CV.mode==='learn'?'Your move: follow the arrow':'Your move',c.c==='w'?'#fff':'#111');
- if(CV.mode==='learn'){cB.arrow([{from:m.from,to:m.to,col:'#e7b84c'}]);cFb(`Play ${fmt([x.san],CV.i)}`)}else cFb('')}
-function trainMove(m,dragged){const l=CV.line,x=l.mv[CV.i];if(!x||CV.done||CV.busy||!cMine())return;const s=C.san(CV.st,m);
- if(C.clean(s)===C.clean(x.san)){CV.st=C.make(CV.st,m);cB.set(CV.st,{last:m,anim:m,dragged});cB.mark({[m.to]:'ok'});cNote(CV.i);cFb(CV.tries?'✓ Correct now':'✓ Correct','ok');CV.i++;setTimeout(trainStep,350)}
- else{CV.tries++;if(CV.tries===1)CV.err++;cB.set(CV.st,{});cB.mark({[m.from]:'bad',[m.to]:'bad'});setTimeout(()=>cB.mark({}),700);
-  const want=C.fromSan(CV.st,x.san);if(CV.mode==='learn'||CV.tries>=2){cB.arrow([{from:want.from,to:want.to,col:'#e7b84c'}]);cFb(`Not ${s}. The move in this line is ${x.san}.`,'no')}else cFb(`${s} is not the move in this line. Try again (one more miss shows the answer).`,'no')}}
-function trainEnd(){const l=CV.line;CV.done=true;const r=SRS[l.id]||{lv:-1,fails:0,seen:0};r.seen++;
- if(CV.mode==='learn'){r.lv=0}else if(CV.err===0){r.lv=Math.min(IV.length-1,r.lv+1)}else{r.lv=0;r.fails++}
- r.due=Date.now()+IV[Math.max(0,r.lv)]*864e5;SRS[l.id]=r;saveSRS();
- cStatus(CV.mode==='learn'?'Line learned':CV.err?`Review done · ${CV.err} mistake${CV.err>1?'s':''}`:'Perfect review','#8fc15a');
- cFb(CV.mode==='learn'?`It will come back for review in ${dueIn(r.due)}.`:CV.err?`Back to level 1: you'll see it again in ${dueIn(r.due)}.`:`Level ${r.lv+1}: next review in ${dueIn(r.due)}.`,'ok');trainRender()}
-function cNext(){if(CV.done&&CV.queue.length){const l=CV.queue.shift();return startLine(l,'review')}const c=CRS.find(x=>x.id===CV.c);const nx=c.lines.find(l=>lstate(l)==='new');if(nx)startLine(nx,'learn');else{CV.view='course';coursesPage()}}
-function cAction(e){const b=e.target.closest('button');if(!b)return;const d=b.dataset;
- if(d.open){CV.c=d.open;CV.view='course';coursesPage()}
+function cAction(e){const b=e.target.closest('button');if(!b||b.disabled)return;const d=b.dataset;
+ if(d.open){CV.c=d.open;CV.view='course';CV.ch=null;coursesPage()}
  else if(d.back){CV.view='list';coursesPage()}
- else if(d.learn){const c=CRS.find(x=>x.id===d.learn);const l=c.lines.find(l=>lstate(l)==='new')||c.lines[0];CV.queue=[];startLine(l,lstate(l)==='new'?'learn':'review')}
- else if(d.rev){const c=CRS.find(x=>x.id===d.rev);let q=c.lines.filter(l=>lstate(l)==='due');if(!q.length)q=c.lines.filter(l=>lstate(l)!=='new');if(!q.length)q=c.lines.slice();q=q.sort(()=>Math.random()-.5);const l=q.shift();CV.queue=q;startLine(l,SRS[l.id]?'review':'learn')}
- else if(d.line){const l=allLines().find(x=>x.id===d.line);CV.queue=[];startLine(l,lstate(l)==='new'?'learn':'review')}}
+ else if(d.learn)startLearn(CRS.find(x=>x.id===d.learn));
+ else if(d.review)startReview(CRS.find(x=>x.id===d.review));
+ else if(d.drill)startDrill(CRS.find(x=>x.id===d.drill));
+ else if(d.learnch!=null){e.preventDefault();CV.ch=+d.learnch;startLearn(curC(),+d.learnch)}
+ else if(d.drillch!=null){e.preventDefault();CV.ch=+d.drillch;startDrill(curC(),+d.drillch)}
+ else if(d.line!=null){const c=curC(),l=c.lines[+d.line];const hasNew=l.steps.some(x=>x.card&&cardState(x.card)==='new');startSession(hasNew?'learn':'drill',c,[l])}}
+function updateBadge(){const n=totalDue();document.querySelectorAll('[data-v=courses]').forEach(b=>{let s=b.querySelector('.badge');if(!s){s=document.createElement('i');s.className='badge';b.appendChild(s)}s.textContent=n||'';s.hidden=!n})}
 
 /* ================= shell ================= */
 let CUR='home';
 const TITLES={home:'Dashboard',explore:'Openings',mistakes:'Mistakes',courses:'Courses',practice:'Practice',settings:'Settings'};
 function segOn(id,v){[...$(id).children].forEach(b=>b.classList.toggle('on',b.dataset.v===v))}
 function go(v){CUR=v;for(const k in TITLES)$('v-'+k).hidden=k!==v;$('title').textContent=TITLES[v];document.querySelectorAll('#nav button,#bnav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
- document.querySelector('.filters').style.visibility=v==='settings'?'hidden':'';try{history.replaceState(null,'','#'+v)}catch(e){}scrollTo(0,0);refresh()}
+ document.querySelector('.filters').style.display=v==='settings'||v==='courses'?'none':'';if(v!=='courses')document.body.classList.remove('training');try{history.replaceState(null,'','#'+v)}catch(e){}scrollTo(0,0);refresh()}
 function refresh(){renderMe();if(!CACHE&&CUR!=='settings'&&CUR!=='courses')return;
- if(CUR==='home')home();else if(CUR==='explore')explore();else if(CUR==='mistakes')mistakesPage();else if(CUR==='courses')coursesPage();else if(CUR==='practice'){renderMods();if(!PR.m.length||!PR.mod)newLine();else renderProg()}else if(CUR==='settings'){$('uIn').value=USER;$('depthV').textContent=DEPTH}}
+ if(CUR==='home')home();else if(CUR==='explore')explore();else if(CUR==='mistakes')mistakesPage();else if(CUR==='courses'){coursesPage();updateBadge()}else if(CUR==='practice'){renderMods();if(!PR.m.length||!PR.mod)newLine();else renderProg()}else if(CUR==='settings'){$('uIn').value=USER;$('depthV').textContent=DEPTH}}
 let lt=0;function refreshLight(){const n=Date.now();if(n-lt<1500)return;lt=n;if(CUR==='home')home();else if(CUR==='mistakes')mistakesPage()}
 function init(){
  $('bnav').innerHTML=$('nav').innerHTML;
@@ -404,9 +445,9 @@ function init(){
  document.addEventListener('keydown',e=>{if(CUR==='explore'&&e.target.tagName!=='INPUT'){if(e.key==='ArrowLeft'){EX.m.pop();explore()}}});
  $('mods').onclick=e=>{const b=e.target.closest('.mod');if(!b)return;PR.mod=b.dataset.id;newLine()};
  $('pNext').onclick=newLine;
- cB=new Board($('cBoard'),{move:trainMove,locked:()=>CV.busy||CV.done,side:()=>{const c=CRS.find(x=>x.id===CV.c);return c?c.c:'w'}});
- $('cList').onclick=cAction;$('cBack').onclick=()=>{CV.view='course';CV.queue=[];coursesPage()};$('cRestart').onclick=()=>startLine(CV.line,CV.mode);$('cNext').onclick=cNext;
- $('cHint').onclick=()=>{const x=CV.line&&CV.line.mv[CV.i];if(!x||CV.done||!cMine())return;const m=C.fromSan(CV.st,x.san);if(CV.mode==='review'&&CV.tries===0){CV.err++;CV.tries=1}cB.arrow([{from:m.from,to:m.to,col:'#e7b84c'}])};$('pHint').onclick=()=>hint(false);$('pShow').onclick=()=>hint(true);
+ cB=new Board($('cBoard'),{move:trainMove,locked:()=>CV.busy||!CV.waiting,side:()=>{const c=curC();return c?c.c:'w'}});
+ $('cList').onclick=cAction;$('cBack').onclick=()=>{CV.view='course';CV.q=[];CV.waiting=null;coursesPage()};$('cRestart').onclick=()=>{CV.phase='play';CV.newCards=CV.newCards.filter(k=>SRS[k]);beginPass()};
+ $('cNext').onclick=()=>{if(!CV.done&&CV.mode==='learn'){CV.newCards=[]}CV.waiting=null;nextLine()};$('cHint').onclick=cHint;updateBadge();setInterval(updateBadge,60000);
  $('syncBtn').onclick=()=>sync(!CACHE);
  $('uForm').onsubmit=e=>{e.preventDefault();const u=$('uIn').value.trim();if(!u)return;USER=u;LS.set('user',u);CACHE=LS.get('games:'+u,null);REP=null;PR.m=[];parse();applyF();sync(!CACHE).then(()=>go('home'))};
  $('engRun').onclick=()=>{engQueueRepertoire();$('setMsg').textContent='Engine analysis started; progress shows in the sidebar.'};
@@ -419,6 +460,7 @@ function init(){
  let syncing=false;const auto=min=>{if(!document.hidden&&CACHE&&!syncing&&Date.now()-(CACHE.synced||0)>min*6e4){syncing=true;sync(false).finally(()=>syncing=false)}};
  document.addEventListener('visibilitychange',()=>auto(5));setInterval(()=>auto(10),6e4);
  if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{})}
+window.__cv=()=>{const sp=CV.waiting;if(!sp)return null;const m=C.fromSan(CV.st,sp.san);const bad=C.legal(CV.st).find(x=>C.san(CV.st,x)!==sp.san&&!curC().cards[sp.card].alt.has(C.san(CV.st,x)));return{san:sp.san,from:m.from,to:m.to,bad:[bad.from,bad.to]}};
 window.__oc={EC,CMP,Eng,C,mistakes:()=>mistakes()};
 try{init()}catch(e){document.body.insertAdjacentHTML('afterbegin',`<p style="padding:20px;color:#f06b54">Something went wrong: ${esc(e.message)}</p>`);console.error(e)}
 }
