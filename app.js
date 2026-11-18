@@ -5,7 +5,7 @@ const C=Chess;
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const LS={get(k,d){try{const v=localStorage.getItem('oc:'+k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem('oc:'+k,JSON.stringify(v));return true}catch(e){return false}},del(k){try{localStorage.removeItem('oc:'+k)}catch(e){}}};
 const API='https://api.chess.com/pub/player/';
-const DEPTH=16;
+const DEPTH=16,LIVE=24;
 
 /* ================= opening knowledge ================= */
 const NOTES={
@@ -125,17 +125,25 @@ function modFor(c,m){let best=null;for(const md of MODS){if(md.c!==c)continue;fo
 
 /* ================= engine ================= */
 // EC[fen] = {s,b,pv,d}: full search, score for side to move.  CMP[fen] = {d, m:{uci:score}, b, bs}: your candidate moves scored inside one search.
-const EC=LS.get('eng:v3',{}),CMP=LS.get('cmp:v3',{});let ecDirty=0;
-const saveEC=()=>{if(ecDirty){LS.set('eng:v3',EC);LS.set('cmp:v3',CMP);ecDirty=0}};setInterval(saveEC,5000);addEventListener('pagehide',saveEC);
+try{['eng:v1','eng:v2','eng:v3','cmp:v3'].forEach(k=>localStorage.removeItem('oc:'+k))}catch(e){}
+const EC=LS.get('eng:v4',{}),CMP=LS.get('cmp:v4',{});let ecDirty=0;
+const saveEC=()=>{if(ecDirty){LS.set('eng:v4',EC);LS.set('cmp:v4',CMP);ecDirty=0}};setInterval(saveEC,5000);addEventListener('pagehide',saveEC);
 const Eng={w:null,q:[],cur:null,ok:true,bg:{total:0,done:0,run:false},
- start(){if(this.w)return;try{this.w=new Worker('engine/stockfish.js');this.w.onmessage=e=>this.msg(String(e.data));this.w.onerror=()=>{this.ok=false;this.fail()};this.w.postMessage('uci');this.w.postMessage('setoption name Hash value 16')}catch(e){this.ok=false}},
+ start(){if(this.w)return;try{this.w=new Worker('engine/stockfish-16.1-lite-single.js');this.w.onmessage=e=>this.msg(String(e.data));this.w.onerror=()=>{this.ok=false;this.fail()};this.w.postMessage('uci');this.w.postMessage('setoption name Hash value 32')}catch(e){this.ok=false}},
  fail(){const q=this.q;this.q=[];if(this.cur)q.unshift(this.cur);this.cur=null;q.forEach(j=>j.res(null));renderEngStat()},
  run(job,prio){if(!this.ok)return Promise.resolve(null);this.start();return new Promise(res=>{job.res=res;job.lines={};if(prio)this.q.unshift(job);else this.q.push(job);this.next()})},
  next(){if(this.cur||!this.q.length)return;const j=this.cur=this.q.shift();const w=this.w;
-  w.postMessage('ucinewgame');w.postMessage('setoption name MultiPV value '+(j.mpv||1));w.postMessage('position fen '+j.fen);w.postMessage('go depth '+j.depth+(j.moves?' searchmoves '+j.moves.join(' '):''))},
+  if(!j.live)w.postMessage('ucinewgame');w.postMessage('setoption name MultiPV value '+(j.mpv||1));w.postMessage('position fen '+j.fen);w.postMessage('go depth '+j.depth+(j.moves?' searchmoves '+j.moves.join(' '):''))},
  msg(t){const j=this.cur;if(!j)return;
-  if(t.startsWith('info')&&t.includes(' pv ')){const m=t.match(/score (cp|mate) (-?\d+)/),k=+((t.match(/multipv (\d+)/)||[])[1]||1);if(m){const v=+m[2];const pv=t.split(' pv ')[1].split(' ');j.lines[k]={s:m[1]==='cp'?v:(v>0?10000-v:-10000-v),u:pv[0],pv:pv.slice(0,8)}}}
-  else if(t.startsWith('bestmove')){this.cur=null;const L=Object.keys(j.lines).sort((a,b)=>a-b).map(k=>j.lines[k]);j.res({L,b:t.split(' ')[1]});this.next()}},
+  if(t.startsWith('info')&&t.includes(' pv ')){const m=t.match(/score (cp|mate) (-?\d+)/),k=+((t.match(/multipv (\d+)/)||[])[1]||1);if(m&&!/(upper|lower)bound/.test(t)){const v=+m[2];const pv=t.split(' pv ')[1].split(' ');const d=+((t.match(/ depth (\d+)/)||[])[1]||0);j.lines[k]={s:m[1]==='cp'?v:(v>0?10000-v:-10000-v),u:pv[0],pv:pv.slice(0,8),d};if(j.live&&k===1&&!j.cancel&&j.onUpd)j.onUpd({s:j.lines[1].s,b:pv[0],pv:j.lines[1].pv,d})}}
+  else if(t.startsWith('bestmove')){this.cur=null;
+   if(j.cancel){j.res(null);return this.next()}
+   if(j.abort){j.abort=false;j.lines={};const li=this.q.findIndex(x=>!x.live);this.q.splice(li<0?this.q.length:li,0,j);return this.next()}const L=Object.keys(j.lines).sort((a,b)=>a-b).map(k=>j.lines[k]);j.res({L,b:t.split(' ')[1]});this.next()}},
+ // live analysis that deepens step by step (keeps the hash between positions, so neighbouring evaluations stay consistent)
+ live(fen,depth,onUpd){if(!this.ok)return Promise.resolve(null);this.start();
+  for(const x of this.q)if(x.live){x.cancel=true}this.q=this.q.filter(x=>!x.live);
+  return new Promise(res=>{const job={fen,depth,live:true,onUpd,lines:{},res:r=>{if(!r||!r.L.length)return res(null);const x={s:r.L[0].s,b:r.b,pv:r.L[0].pv,d:depth};EC[fen]=x;ecDirty=1;res(x)}};
+   this.q.unshift(job);if(this.cur){if(this.cur.live)this.cur.cancel=true;else this.cur.abort=true;this.w.postMessage('stop')}else this.next()})},
  // full evaluation of a position
  async eval(fen,depth,prio){const c=EC[fen];if(c&&c.d>=depth)return c;const r=await this.run({fen,depth},prio);if(!r||!r.L.length)return c||null;const x={s:r.L[0].s,b:r.b,pv:r.L[0].pv,d:depth};EC[fen]=x;ecDirty=1;return x},
  // score a set of moves (uci) at the root, plus the best move, within comparable searches
@@ -256,11 +264,12 @@ function explore(anim){const st=C.play(EX.m)||C.start();const prev=EX.m.length?C
  const show=E=>{if(tok!==eTok)return;if(!E){$('eEng').innerHTML='<span class="small">Engine unavailable</span>';return}
   const ws=st.t==='w'?E.s:-E.s,mineS=(EX.c==='w')?ws:-ws;const bar=$('eEval');const pct=50+50*Math.tanh(ws/450);bar.querySelector('i').style.height=pct+'%';bar.querySelector('span').textContent=evalTxt(Math.abs(ws)).replace(/^[+−]/,'');bar.classList.toggle('neg',ws<0);bar.style.transform=EX.c==='b'?'rotate(180deg)':'';bar.querySelector('span').style.transform=EX.c==='b'?'rotate(180deg)':'';
   let s=st,pv=[];for(const u of E.pv.slice(0,6)){const m=C.fromUci(s,u);if(!m)break;pv.push(C.san(s,m));s=C.make(s,m)}
-  const bm=C.fromUci(st,E.b);$('eEng').innerHTML=`<b class="${mineS>=0?'up':'down'}">${evalTxt(mineS)}</b><span class="pv">${esc(fmt(pv,EX.m.length))}</span><span class="small" style="margin-left:auto">depth ${E.d}</span>`;
+  const bm=C.fromUci(st,E.b);$('eEng').innerHTML=`<b class="${mineS>=0?'up':'down'}">${evalTxt(mineS)}</b><span class="pv">${esc(fmt(pv,EX.m.length))}</span><span class="small" style="margin-left:auto">depth ${E.d}${E.d<LIVE?'/'+LIVE:''}</span>`;
   if(bm)eB.arrow([{from:bm.from,to:bm.to,col:'#8fc15a'}])};
  const c=EC[fen];if(c)show(c);else $('eEng').innerHTML='<span class="small">Engine thinking…</span>';
- Eng.eval(fen,DEPTH,true).then(show);
- const us=K.slice(0,6).map(k=>C.fromSan(st,k.mv)).filter(Boolean).map(C.uci);if(us.length)Eng.cmp(fen,us,DEPTH-2,true).then(()=>{if(tok===eTok)$('eRows').innerHTML=rowsHTML()})}
+ const goLive=()=>{if(tok!==eTok)return;const c2=EC[fen];if(c2&&c2.d>=LIVE)return show(c2);Eng.live(fen,LIVE,u=>show(u)).then(r=>{if(r)show(r)})};
+ const us=K.slice(0,6).map(k=>C.fromSan(st,k.mv)).filter(Boolean).map(C.uci);
+ if(us.length)Eng.cmp(fen,us,DEPTH-2,true).then(()=>{if(tok!==eTok)return;$('eRows').innerHTML=rowsHTML();goLive()});else goLive()}
 function exGo(mv){EX.m.push(mv);explore(true)}
 
 /* ================= mistakes page ================= */
@@ -401,11 +410,14 @@ function init(){
  $('syncBtn').onclick=()=>sync(!CACHE);
  $('uForm').onsubmit=e=>{e.preventDefault();const u=$('uIn').value.trim();if(!u)return;USER=u;LS.set('user',u);CACHE=LS.get('games:'+u,null);REP=null;PR.m=[];parse();applyF();sync(!CACHE).then(()=>go('home'))};
  $('engRun').onclick=()=>{engQueueRepertoire();$('setMsg').textContent='Engine analysis started; progress shows in the sidebar.'};
- $('engClear').onclick=()=>{for(const k in EC)delete EC[k];for(const k in CMP)delete CMP[k];LS.del('eng:v3');LS.del('cmp:v3');$('setMsg').textContent='Engine cache cleared.';renderEngStat()};
+ $('engClear').onclick=()=>{for(const k in EC)delete EC[k];for(const k in CMP)delete CMP[k];LS.del('eng:v4');LS.del('cmp:v4');try{localStorage.removeItem('oc:eng:v3');localStorage.removeItem('oc:cmp:v3')}catch(e){}$('setMsg').textContent='Engine cache cleared.';renderEngStat()};
  $('allClear').onclick=()=>{if($('allClear').dataset.sure){try{Object.keys(localStorage).filter(k=>k.startsWith('oc:')).forEach(k=>localStorage.removeItem(k))}catch(e){}location.reload()}else{$('allClear').dataset.sure=1;$('allClear').textContent='Tap again to delete everything'}};
  new ResizeObserver(()=>{if(CUR==='home')drawRating()}).observe($('rChart'));
  const h=location.hash.slice(1);go(TITLES[h]?h:'home');
- if(!CACHE)sync(true);else{const stale=Date.now()-(CACHE.synced||0)>30*6e4;if(stale)sync(false);else engQueueRepertoire()}
+ if(!CACHE)sync(true);else{const stale=Date.now()-(CACHE.synced||0)>5*6e4;if(stale)sync(false);else engQueueRepertoire()}
+ // keep games up to date automatically: when you come back to the app, and every 10 minutes while it is open
+ let syncing=false;const auto=min=>{if(!document.hidden&&CACHE&&!syncing&&Date.now()-(CACHE.synced||0)>min*6e4){syncing=true;sync(false).finally(()=>syncing=false)}};
+ document.addEventListener('visibilitychange',()=>auto(5));setInterval(()=>auto(10),6e4);
  if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{})}
 window.__oc={EC,CMP,Eng,C,mistakes:()=>mistakes()};
 try{init()}catch(e){document.body.insertAdjacentHTML('afterbegin',`<p style="padding:20px;color:#f06b54">Something went wrong: ${esc(e.message)}</p>`);console.error(e)}

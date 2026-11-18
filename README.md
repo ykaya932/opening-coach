@@ -14,4 +14,4 @@ Install on a phone: open the site, then *Share → Add to Home Screen* (iPhone) 
 
 ## Credits
 - Chess pieces: "cburnett" set by Colin M.L. Burnett, GPLv2+
-- Engine: [Stockfish.js](https://github.com/nmrugg/stockfish.js) (Stockfish 11), GPLv3 — see `engine/COPYING-stockfish.txt`
+- Engine: [Stockfish.js](https://github.com/nmrugg/stockfish.js) (Stockfish 16.1 lite, single-threaded), GPLv3 — see `engine/COPYING-stockfish.txt`

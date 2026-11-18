@@ -133,11 +133,11 @@
     <form id="uForm" class="uform"><input id="uIn" autocomplete="off" spellcheck="false" placeholder="chess.com username"><button class="btn pri">Load games</button></form>
     <p class="small">Games are downloaded from the public chess.com API and stored in this browser. Finished months are never downloaded again; only new games are fetched and analysed when you sync.</p>
     <h2 style="margin-top:28px">Engine analysis</h2>
-    <p class="small">Stockfish 11 runs in your browser and checks the moves you play most often in the opening (depth <span id="depthV">14</span>). Results are cached, so each position is analysed only once.</p>
+    <p class="small">Stockfish 16.1 (with its neural-network evaluation) runs in your browser and checks the moves you play most often in the opening (depth <span id="depthV">16</span>; live analysis in Openings deepens to depth 24). Results are cached, so each position is analysed only once.</p>
     <div class="btns"><button class="btn" id="engRun">Analyse now</button><button class="btn" id="engClear">Clear engine cache</button><button class="btn" id="allClear">Delete all stored data</button></div>
     <p class="small" id="setMsg"></p>
     <h2 style="margin-top:28px">About</h2>
-    <p class="small">Pieces: cburnett set by Colin M.L. Burnett (GPLv2+). Engine: <a href="https://github.com/nmrugg/stockfish.js">Stockfish.js</a> (GPL). Opening notes are hand-written for this repertoire.</p>
+    <p class="small">Pieces: cburnett set by Colin M.L. Burnett (GPLv2+). Engine: Stockfish 16.1 via <a href="https://github.com/nmrugg/stockfish.js">Stockfish.js</a> (GPLv3). Opening notes are hand-written for this repertoire.</p>
    </div>
   </section>
  </div>
