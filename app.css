@@ -268,3 +268,8 @@ details.chap .lrow{background:var(--s2);border-color:transparent}
 @media(max-width:760px){.modes{gap:8px}.mbtn{padding:12px;min-height:64px}.mbtn b{font-size:16px}.cbtns{margin-left:0}}
 .mbtn.pri:disabled{background:var(--s1);border-color:var(--line);color:var(--ink)}.mbtn.pri:disabled span{color:var(--mute)}
 @media(max-width:760px){body.training .topbar{display:none}body.training .main{padding-top:10px}body.training .side{display:none}body.training .panel{padding:12px;gap:10px}body.training .coach{padding:10px 12px}body.training .cstat{font-size:17px}body.training .cfb{min-height:20px}}
+
+.explain.plan h4{margin:0 0 6px;font-size:15px;color:var(--gold)}.explain.plan h5{margin:12px 0 4px;font-size:13px;color:var(--mute);font-weight:700}
+.explain.plan p{margin:0 0 6px}.explain.plan ul{margin:0;padding-left:18px}.explain.plan li{margin:3px 0}
+.wbtn{margin-top:10px;width:100%;background:#24324a;border-color:#34507a;color:#cfe0ff}.wbtn:hover{background:#2c3d5a}
+.lwrap{display:flex;gap:6px;align-items:stretch;margin-bottom:8px}.lwrap .lrow{margin:0;flex:1}.wch{flex:none;align-self:center}
