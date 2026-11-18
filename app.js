@@ -454,7 +454,7 @@ function describeMove(st,m,prev){const after=C.make(st,m),W=st.t==='w',to=C.sqNa
  else if(m.cap){const v=m.ep?'P':st.b[m.to].toUpperCase();if(prev&&prev.cap&&prev.to===m.to)parts.push(v===prev.p&&prev.victim===v?`recaptures on ${to} (${PNAME[v]} trade)`:`recaptures on ${to}`);else parts.push(`takes the ${PNAME[v]} on ${to}`)}
  else if(m.p==='P'){const f=m.to&7,ek=st.b.indexOf(W?'k':'K'),ekf=ek&7,ekr=ek>>3,home=W?ekr===7:ekr===0;
   const atk=[m.to+(W?7:-9),m.to+(W?9:-7)].filter(x=>x>=0&&x<64&&Math.abs((x&7)-f)===1).some(x=>st.b[x]===(W?'p':'P'));
-  if(atk)parts.push(`plays the pawn break ${C.san(st,m)}`);else if(home&&Math.abs(f-ekf)<=2&&(ekf>=5||ekf<=2))parts.push('pushes a pawn toward the enemy king');else if(f===3||f===4)parts.push('gains space in the centre');else parts.push(`advances the ${'abcdefgh'[f]}-pawn`)}
+  if(atk)parts.push(`plays the pawn break ${C.san(st,m)}`);else if(home&&Math.abs(f-ekf)<=2&&(ekf>=5||ekf<=2)&&Math.abs((st.b.indexOf(W?'K':'k')&7)-f)>=3)parts.push('pushes a pawn toward the enemy king');else if(f===3||f===4)parts.push('gains space in the centre');else parts.push(`advances the ${'abcdefgh'[f]}-pawn`)}
  else if(m.p==='R'){const f=m.to&7;let own=0,opp=0;for(let r=0;r<8;r++){const p=after.b[r*8+f];if(p&&p.toUpperCase()==='P'){if(C.white(p)===W)own++;else opp++}}
   parts.push(!own&&!opp?`puts the rook on the open ${'abcdefgh'[f]}-file`:!own?`puts the rook on the half-open ${'abcdefgh'[f]}-file`:`brings the rook to ${to}`)}
  else if(m.p==='Q')parts.push(`brings the queen to ${to}`);
